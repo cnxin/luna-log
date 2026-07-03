@@ -9,8 +9,8 @@
     "加入原版、薄荷、蓝色三套 LifeLog 风格视觉主题",
     "新增关于界面的更新检查、版本说明和来源诊断"
   ],
-  "downloadUrl": "https://github.com/cnxin/luna-log/releases",
-  "releaseUrl": "https://github.com/cnxin/luna-log/releases",
-  "fileSize": 0,
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.0/luna-log-v1.0.0-release.apk",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.0",
+  "fileSize": 76476135,
   "mandatory": false
 }
