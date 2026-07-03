@@ -1,36 +1,48 @@
 # Luna Log
 
-Luna Log is a local-first mobile app demo for private intimacy, menstrual cycle, and body-state tracking. It is built with Expo SDK 57 and React Native, with a phone-shaped web preview for fast UI iteration plus Android/iOS targets for app builds.
+Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密生活、月经周期和身体状态。项目基于 Expo SDK 57 和 React Native 开发，支持手机外观的 Web 预览，也可以构建 Android / iOS App。
 
-## Current Scope
+## 当前功能
 
-- Home timeline for recent intimacy, period, and symptom records.
-- LifeLog-inspired calendar layout with selected-date status cards.
-- Menstrual cycle tracking with period, fertile window, ovulation, and prediction markers.
-- Separate partnered sex and solo sex add buttons.
-- Aphrodite-inspired intimacy forms with duration, protection, positions, mood, orgasm, toys, notes, and timer support.
-- Weekly, monthly, and yearly statistics with partnered/solo split colors and time distribution.
-- Three visual themes: classic, mint, and blue.
-- About screen opened from the top-right icon, including version info, update checking, release notes, download links, and source diagnostics.
-- Local-first storage through AsyncStorage.
+- 首页时间线：展示最近的性生活、经期和症状记录。
+- LifeLog 风格日历：点击日期后显示当天状态卡片。
+- 月经周期记录：支持经期、易孕期、排卵日和下次经期预测。
+- 做爱和自慰独立入口：添加按钮分开，记录类型更清晰。
+- Aphrodite 风格亲密记录表单：支持持续时间、保护措施、姿势、心情、高潮、道具、备注和计时器。
+- 统计页：支持按周、按月、按年查看次数、持续时间和时间分布，并区分做爱 / 自慰。
+- 三套视觉风格：原版、薄荷、蓝色。
+- 关于与更新中心：右上角图标进入，可查看版本信息、检查更新、发布说明、下载链接和来源诊断。
+- 本地存储：使用 AsyncStorage 保存数据。
 
-## Project
+## 项目信息
 
-- Repository: `https://github.com/cnxin/luna-log`
-- App name: `Luna Log`
-- Expo slug: `luna-log`
-- Current version: `1.0.0`
+- GitHub 仓库：`https://github.com/cnxin/luna-log`
+- 应用名称：`Luna Log`
+- Expo slug：`luna-log`
+- 当前版本：`1.0.0`
+- Android 包名：`com.anonymous.lunalog`
 
-## Development
+## 开发运行
+
+安装依赖：
 
 ```bash
 npm install
+```
+
+启动手机外观 Web 预览：
+
+```bash
 npm run web:preview
 ```
 
-The web preview runs on `http://127.0.0.1:8090` by default.
+默认访问地址：
 
-Other useful commands:
+```text
+http://127.0.0.1:8090
+```
+
+其他常用命令：
 
 ```bash
 npm run web
@@ -39,53 +51,72 @@ npm run ios
 npx tsc --noEmit
 ```
 
-## Android APK Build
+## Android APK 构建
 
-This project can build a local Android APK through the generated native Android project:
+首次构建前生成 Android 原生工程：
 
 ```bash
 npx expo prebuild --platform android
+```
+
+构建 Release APK：
+
+```bash
 cd android
 .\gradlew.bat assembleRelease
 ```
 
-The release APK is generated at:
+Release APK 输出位置：
 
 ```text
 android/app/build/outputs/apk/release/app-release.apk
 ```
 
-For local debug installation, use:
+构建 Debug APK：
 
 ```bash
 cd android
 .\gradlew.bat assembleDebug
 ```
 
-The debug APK is generated at:
+Debug APK 输出位置：
 
 ```text
 android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Update Manifest
+## 下载
 
-The app checks `update-manifest.json` from GitHub raw first, then jsDelivr as a fallback:
+当前版本 Release：
+
+```text
+https://github.com/cnxin/luna-log/releases/tag/v1.0.0
+```
+
+Android APK：
+
+```text
+https://github.com/cnxin/luna-log/releases/download/v1.0.0/luna-log-v1.0.0-release.apk
+```
+
+## 更新清单
+
+应用内更新中心会先读取 GitHub Raw，再读取 jsDelivr 作为备用源：
 
 ```text
 https://raw.githubusercontent.com/cnxin/luna-log/master/update-manifest.json
 https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/update-manifest.json
 ```
 
-When publishing a new build, update these files together:
+发布新版本时，需要同步更新：
 
 - `package.json`
 - `app.json`
 - `APP_VERSION` in `App.tsx`
 - `update-manifest.json`
 
-The update center is intentionally lightweight. It does not use native OTA installation yet; it compares manifest versions and opens the release/download URL.
+当前更新中心是轻量实现：只比较远程清单版本号，并打开 Release / APK 下载链接；暂未接入原生 OTA 或应用内安装流程。
 
-## Notes
+## 说明
 
-This is a demo app and keeps data on-device. It is not a medical diagnosis tool and should not be used as the only source for health decisions.
+这是一个 Demo 项目，数据默认保存在本机。月经预测和周期状态仅用于记录辅助，不应作为医学判断依据。
