@@ -1,0 +1,5848 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import {
+  Activity,
+  Download,
+  ExternalLink,
+  BarChart3,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CircleDot,
+  Clock,
+  Droplet,
+  Droplets,
+  Eye,
+  EyeOff,
+  Heart,
+  HeartHandshake,
+  Home,
+  Hourglass,
+  Info,
+  Moon,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Settings,
+  Sparkles,
+  Trash2,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
+import {
+  ActivityIndicator,
+  Alert,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+
+type Screen = 'home' | 'calendar' | 'insights' | 'settings';
+type SheetType = 'partneredSex' | 'soloSex' | 'period' | 'symptom';
+type RecordType = 'sex' | 'period' | 'symptom';
+type ThemeStyle = 'classic' | 'mint' | 'blue';
+
+type SexRecord = {
+  id: string;
+  dateTime: string;
+  count: number;
+  durationMinutes?: number;
+  satisfaction?: number;
+  partnerAlias?: string;
+  protection?: string;
+  protectionMethods?: string[];
+  sexType?: string;
+  sexTypes?: string[];
+  place?: string;
+  mood?: string;
+  arousal?: boolean;
+  partnerArousal?: boolean;
+  orgasm?: boolean;
+  toyUsed?: boolean;
+  lingerie?: boolean;
+  watchedAdultMovie?: boolean;
+  syncedWithPartner?: boolean;
+  ejaculationPlace?: string;
+  initiator?: 'self' | 'partner';
+  positions?: string[];
+  soloTools?: string[];
+  notes?: string;
+};
+
+type PeriodRecord = {
+  id: string;
+  startDate: string;
+  endDate?: string;
+  flow?: string;
+  painLevel: number;
+  symptoms: string[];
+  notes?: string;
+};
+
+type SymptomRecord = {
+  id: string;
+  date: string;
+  intensity: number;
+  symptoms: string[];
+  notes?: string;
+};
+
+type AppState = {
+  sexRecords: SexRecord[];
+  periodRecords: PeriodRecord[];
+  symptomRecords: SymptomRecord[];
+  settings: {
+    privacyMode: boolean;
+    cycleDays: number;
+    periodDays: number;
+    themeStyle: ThemeStyle;
+  };
+};
+
+type TimelineItem = {
+  id: string;
+  type: RecordType;
+  date: Date;
+  title: string;
+  meta: string[];
+  notes?: string;
+};
+
+type CycleInfo = {
+  start: Date;
+  day: number;
+  normalizedDay: number;
+  nextPeriod: Date;
+  ovulation: Date;
+  fertileStart: Date;
+  fertileEnd: Date;
+  cycleLength: number;
+  variability: number;
+  confidence: 'high' | 'low';
+  nextPeriodEarliest: Date;
+  nextPeriodLatest: Date;
+} | null;
+
+type ReleaseNote = {
+  version: string;
+  date: string;
+  title: string;
+  highlights: string[];
+};
+
+type UpdateSource = {
+  key: string;
+  name: string;
+  url: string;
+};
+
+type UpdateSourceDiagnostic = {
+  sourceName: string;
+  sourceUrl: string;
+  status: 'success' | 'failed';
+  message: string;
+  durationMs: number;
+  version?: string;
+};
+
+type AppUpdateManifest = {
+  version?: string;
+  releaseDate?: string;
+  title?: string;
+  notes?: string[];
+  highlights?: string[];
+  changelog?: string;
+  downloadUrl?: string;
+  releaseUrl?: string;
+  fileSize?: number;
+  mandatory?: boolean;
+};
+
+type AppUpdateInfo = {
+  status: 'latest' | 'available' | 'failed';
+  localVersion: string;
+  latestVersion: string;
+  title: string;
+  notes: string[];
+  releaseDate?: string;
+  checkedAt: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  downloadUrl?: string;
+  releaseUrl?: string;
+  fileSize?: number;
+  mandatory?: boolean;
+};
+
+const today = new Date();
+const storageKey = 'luna-log-app-v5';
+const APP_VERSION = '1.0.0';
+const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
+const UPDATE_SOURCES: UpdateSource[] = [
+  {
+    key: 'github-raw',
+    name: 'GitHub Raw',
+    url: 'https://raw.githubusercontent.com/cnxin/luna-log/master/update-manifest.json',
+  },
+  {
+    key: 'jsdelivr',
+    name: 'jsDelivr 镜像',
+    url: 'https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/update-manifest.json',
+  },
+];
+const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.0',
+    date: '2026-07-04',
+    title: '移动端 Demo 和记录体验',
+    highlights: [
+      '完成手机壳预览、首页、日历、统计和设置四个主界面',
+      '做爱和自慰拆分为独立入口，并补充 Aphrodite 风格的记录项',
+      '日历支持经期、易孕期和亲密记录标记，统计支持周/月/年查看',
+      '加入原版、薄荷、蓝色三套 LifeLog 风格视觉主题',
+    ],
+  },
+];
+
+type ThemePalette = {
+  primary: string;
+  primaryLight: string;
+  secondary: string;
+  bg: string;
+  card: string;
+  text: string;
+  sub: string;
+  line: string;
+  soft: string;
+  danger: string;
+  dangerSoft: string;
+  green: string;
+  gold: string;
+  period: string;
+  periodLight: string;
+  sex: string;
+  shadow: string;
+  webStage: string;
+  phoneFrame: string;
+  appGradient: readonly [string, string, string];
+  heroGradient: readonly [string, string, string];
+  bubbleGradient: readonly [string, string];
+  avatarGradient: readonly [string, string];
+};
+
+const themePalettes: Record<ThemeStyle, ThemePalette> = {
+  classic: {
+    primary: '#7c8cf8',
+    primaryLight: '#aeb8ff',
+    secondary: '#f5a3ae',
+    bg: '#fafbff',
+    card: 'rgba(255,255,255,0.94)',
+    text: '#20263a',
+    sub: '#737b91',
+    line: 'rgba(124,140,248,0.1)',
+    soft: 'rgba(124,140,248,0.09)',
+    danger: '#b94040',
+    dangerSoft: 'rgba(217,87,87,0.12)',
+    green: '#12b886',
+    gold: '#fdcb6e',
+    period: '#6688ff',
+    periodLight: '#9bc1ff',
+    sex: '#ff7b9c',
+    shadow: '#7c8cf8',
+    webStage: '#eef1ff',
+    phoneFrame: '#141826',
+    appGradient: ['rgba(124,140,248,0.12)', 'rgba(245,163,174,0.11)', '#fafbff'],
+    heroGradient: ['rgba(124,140,248,0.18)', 'rgba(245,163,174,0.12)', 'rgba(255,255,255,0.94)'],
+    bubbleGradient: ['rgba(124,140,248,0.18)', 'rgba(245,163,174,0.18)'],
+    avatarGradient: ['#7c8cf8', '#f5a3ae'],
+  },
+  mint: {
+    primary: '#20c7ad',
+    primaryLight: '#9be9dc',
+    secondary: '#74b9ef',
+    bg: '#effff8',
+    card: 'rgba(255,255,255,0.94)',
+    text: '#173734',
+    sub: '#5f7f7a',
+    line: 'rgba(32,199,173,0.14)',
+    soft: 'rgba(32,199,173,0.12)',
+    danger: '#b9405f',
+    dangerSoft: 'rgba(185,64,95,0.12)',
+    green: '#12b886',
+    gold: '#ffd166',
+    period: '#62aef6',
+    periodLight: '#b9e8ff',
+    sex: '#ff8fb1',
+    shadow: '#12b886',
+    webStage: '#e7fff8',
+    phoneFrame: '#103d3a',
+    appGradient: ['rgba(140,239,216,0.32)', 'rgba(77,171,247,0.22)', '#effff8'],
+    heroGradient: ['rgba(126,223,208,0.32)', 'rgba(123,189,242,0.18)', 'rgba(255,255,255,0.94)'],
+    bubbleGradient: ['rgba(126,223,208,0.38)', 'rgba(123,189,242,0.28)'],
+    avatarGradient: ['#68d8c8', '#74b9ef'],
+  },
+  blue: {
+    primary: '#0f77d8',
+    primaryLight: '#8ed8ff',
+    secondary: '#35c9ff',
+    bg: '#eaf6ff',
+    card: 'rgba(255,255,255,0.94)',
+    text: '#10223f',
+    sub: '#5d7291',
+    line: 'rgba(15,119,216,0.13)',
+    soft: 'rgba(53,201,255,0.12)',
+    danger: '#b94072',
+    dangerSoft: 'rgba(185,64,114,0.12)',
+    green: '#16c6a3',
+    gold: '#ffd166',
+    period: '#3f7dff',
+    periodLight: '#9cd3ff',
+    sex: '#ff87ba',
+    shadow: '#0f77d8',
+    webStage: '#dceeff',
+    phoneFrame: '#06173a',
+    appGradient: ['rgba(0,63,139,0.2)', 'rgba(21,169,255,0.16)', '#eaf6ff'],
+    heroGradient: ['rgba(15,119,216,0.18)', 'rgba(53,201,255,0.16)', 'rgba(255,255,255,0.95)'],
+    bubbleGradient: ['rgba(15,119,216,0.18)', 'rgba(53,201,255,0.2)'],
+    avatarGradient: ['#0f77d8', '#35c9ff'],
+  },
+};
+
+let colors = themePalettes.classic;
+
+const initialState: AppState = {
+  sexRecords: [],
+  periodRecords: [],
+  symptomRecords: [],
+  settings: {
+    privacyMode: false,
+    cycleDays: 28,
+    periodDays: 5,
+    themeStyle: 'classic',
+  },
+};
+
+const screenCopy: Record<Screen, { title: string; subtitle: string }> = {
+  home: { title: '下午好', subtitle: '从今天的一次小记录开始' },
+  calendar: { title: '日历', subtitle: '经期、易孕期和亲密记录' },
+  insights: { title: '统计', subtitle: '看见频率、周期和身体趋势' },
+  settings: { title: '设置', subtitle: '本地数据、隐私和导出' },
+};
+
+const themeOptions: Array<{ value: ThemeStyle; label: string; hint: string }> = [
+  { value: 'classic', label: '原版', hint: '柔和紫粉' },
+  { value: 'mint', label: '薄荷', hint: '清爽青绿' },
+  { value: 'blue', label: '蓝色', hint: '深海冷光' },
+];
+
+function buildRecordMeta(theme: ThemePalette): Record<RecordType, { label: string; short: string; Icon: LucideIcon; colors: readonly [string, string] }> {
+  return {
+    sex: { label: '性生活', short: '亲密生活', Icon: HeartHandshake, colors: [theme.sex, theme.primary] },
+    period: { label: '月经', short: '周期', Icon: Droplet, colors: [theme.period, theme.periodLight] },
+    symptom: { label: '症状', short: '身体状态', Icon: Sparkles, colors: [theme.gold, theme.secondary] },
+  };
+}
+
+let recordMeta = buildRecordMeta(colors);
+
+function getSexKindMeta(record: SexRecord | null | undefined) {
+  const solo = record ? isSoloSexRecord(record) : false;
+  return solo
+    ? { label: '自慰', Icon: Sparkles, color: colors.primary, colors: [colors.primary, colors.secondary] as const }
+    : { label: '做爱', Icon: HeartHandshake, color: colors.sex, colors: [colors.sex, colors.primary] as const };
+}
+
+function addDays(date: Date, amount: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function toDateKey(date: Date) {
+  const local = new Date(date);
+  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+  return local.toISOString().slice(0, 10);
+}
+
+function parseDateKey(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function daysBetween(left: Date, right: Date) {
+  return Math.round((startOfDay(right).getTime() - startOfDay(left).getTime()) / 86400000);
+}
+
+function shortDate(date: Date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(date);
+}
+
+function longDate(date: Date) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  }).format(date);
+}
+
+function monthLabel(date: Date) {
+  return `${date.getFullYear()}年 ${date.getMonth() + 1}月`;
+}
+
+function relativeDateLabel(date: Date) {
+  const diff = daysBetween(new Date(), date);
+  if (diff === 0) return { label: '今天', tone: 'today' as const };
+  if (diff < 0) return { label: `${Math.abs(diff)} 天前`, tone: 'past' as const };
+  return { label: `${diff} 天后`, tone: 'future' as const };
+}
+
+function dateTimeLabel(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function uid(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function sexSheetTypeForRecord(record: SexRecord): Extract<SheetType, 'partneredSex' | 'soloSex'> {
+  return isSoloSexRecord(record) ? 'soloSex' : 'partneredSex';
+}
+
+function isSexSheet(type: SheetType | null): type is 'partneredSex' | 'soloSex' {
+  return type === 'partneredSex' || type === 'soloSex';
+}
+
+function compareVersions(left: string, right: string) {
+  const normalize = (value: string) =>
+    value
+      .replace(/^v/i, '')
+      .split(/[.-]/)
+      .map((part) => Number.parseInt(part, 10))
+      .map((part) => (Number.isNaN(part) ? 0 : part));
+  const leftParts = normalize(left);
+  const rightParts = normalize(right);
+  const length = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const leftPart = leftParts[index] || 0;
+    const rightPart = rightParts[index] || 0;
+    if (leftPart > rightPart) return 1;
+    if (leftPart < rightPart) return -1;
+  }
+  return 0;
+}
+
+function formatFileSize(bytes?: number) {
+  if (!bytes || bytes <= 0) return '--';
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatUpdateDate(value?: string) {
+  if (!value) return '--';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
+}
+
+function formatCheckedAt(value?: string) {
+  if (!value) return '尚未检查';
+  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+async function fetchWithTimeout(url: string, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function normalizeManifest(manifest: AppUpdateManifest, source: UpdateSource, checkedAt: string): AppUpdateInfo {
+  const latestVersion = manifest.version || APP_VERSION;
+  const notes = manifest.highlights?.length ? manifest.highlights : manifest.notes?.length ? manifest.notes : manifest.changelog ? [manifest.changelog] : [];
+  const hasUpdate = compareVersions(latestVersion, APP_VERSION) > 0;
+  return {
+    status: hasUpdate ? 'available' : 'latest',
+    localVersion: APP_VERSION,
+    latestVersion,
+    title: manifest.title || (hasUpdate ? '发现新版本' : '当前已是最新版本'),
+    notes,
+    releaseDate: manifest.releaseDate,
+    checkedAt,
+    sourceName: source.name,
+    sourceUrl: source.url,
+    downloadUrl: manifest.downloadUrl,
+    releaseUrl: manifest.releaseUrl || UPDATE_REPOSITORY_URL,
+    fileSize: manifest.fileSize,
+    mandatory: manifest.mandatory,
+  };
+}
+
+async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostics: UpdateSourceDiagnostic[] }> {
+  const checkedAt = new Date().toISOString();
+  const diagnostics: UpdateSourceDiagnostic[] = [];
+
+  for (const source of UPDATE_SOURCES) {
+    const startedAt = Date.now();
+    try {
+      const response = await fetchWithTimeout(`${source.url}?t=${Date.now()}`);
+      const durationMs = Date.now() - startedAt;
+      if (!response.ok) {
+        diagnostics.push({
+          sourceName: source.name,
+          sourceUrl: source.url,
+          status: 'failed',
+          message: `HTTP ${response.status}`,
+          durationMs,
+        });
+        continue;
+      }
+      const manifest = (await response.json()) as AppUpdateManifest;
+      if (!manifest.version) {
+        diagnostics.push({
+          sourceName: source.name,
+          sourceUrl: source.url,
+          status: 'failed',
+          message: 'manifest 缺少 version',
+          durationMs,
+        });
+        continue;
+      }
+      diagnostics.push({
+        sourceName: source.name,
+        sourceUrl: source.url,
+        status: 'success',
+        message: '已读取更新清单',
+        durationMs,
+        version: manifest.version,
+      });
+      return { info: normalizeManifest(manifest, source, checkedAt), diagnostics };
+    } catch (error) {
+      diagnostics.push({
+        sourceName: source.name,
+        sourceUrl: source.url,
+        status: 'failed',
+        message: error instanceof Error && error.name === 'AbortError' ? '请求超时' : '网络不可用',
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  }
+
+  return {
+    info: {
+      status: 'failed',
+      localVersion: APP_VERSION,
+      latestVersion: APP_VERSION,
+      title: '暂时无法检查更新',
+      notes: ['请稍后重试，或直接打开 GitHub 项目查看最新版本。'],
+      checkedAt,
+      releaseUrl: UPDATE_REPOSITORY_URL,
+    },
+    diagnostics,
+  };
+}
+
+export default function App() {
+  const [state, setState] = useState<AppState>(initialState);
+  const [loaded, setLoaded] = useState(false);
+  const [screen, setScreen] = useState<Screen>('home');
+  const [visibleMonth, setVisibleMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [sheetType, setSheetType] = useState<SheetType | null>(null);
+  const [editingSexRecord, setEditingSexRecord] = useState<SexRecord | null>(null);
+  const [editingPeriodRecord, setEditingPeriodRecord] = useState<PeriodRecord | null>(null);
+  const [editingSymptomRecord, setEditingSymptomRecord] = useState<SymptomRecord | null>(null);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [statsRange, setStatsRange] = useState<'week' | 'month' | 'year'>('year');
+  const [fabOpen, setFabOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [updateDiagnostics, setUpdateDiagnostics] = useState<UpdateSourceDiagnostic[]>([]);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [notice, setNotice] = useState<{ message: string; action?: { label: string; run: () => void } } | null>(null);
+  const loadedRef = useRef(false);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cycleInfo = useMemo(() => getCycleInfo(state), [state]);
+  const timeline = useMemo(() => buildTimeline(state), [state]);
+  const currentCopy = screenCopy[screen];
+  const stats = useMemo(() => buildStats(state), [state]);
+  const activeTheme = themePalettes[state.settings.themeStyle || 'classic'];
+  colors = activeTheme;
+  styles = createStyles(activeTheme);
+  recordMeta = buildRecordMeta(activeTheme);
+
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(storageKey)
+      .then((raw) => {
+        if (!alive || !raw) return;
+        const parsed = JSON.parse(raw) as Partial<AppState>;
+        setState({
+          sexRecords: parsed.sexRecords || [],
+          periodRecords: parsed.periodRecords || [],
+          symptomRecords: parsed.symptomRecords || [],
+          settings: { ...initialState.settings, ...(parsed.settings || {}) },
+        });
+      })
+      .catch(() => showNotice('读取本地数据失败'))
+      .finally(() => {
+        if (!alive) return;
+        loadedRef.current = true;
+        setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    AsyncStorage.setItem(storageKey, JSON.stringify(state)).catch(() => {
+      showNotice('保存失败，请重试');
+    });
+  }, [state]);
+
+  function patchState(updater: (current: AppState) => AppState) {
+    setState((current) => updater(current));
+  }
+
+  function showNotice(message: string, action?: { label: string; run: () => void }, duration = 2500) {
+    setNotice({ message, action });
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), duration);
+  }
+
+  function deleteRecord(type: RecordType, id: string) {
+    const record =
+      type === 'sex'
+        ? state.sexRecords.find((item) => item.id === id)
+        : type === 'period'
+          ? state.periodRecords.find((item) => item.id === id)
+          : state.symptomRecords.find((item) => item.id === id);
+    if (!record) return;
+    patchState((current) => ({
+      ...current,
+      sexRecords: type === 'sex' ? current.sexRecords.filter((item) => item.id !== id) : current.sexRecords,
+      periodRecords: type === 'period' ? current.periodRecords.filter((item) => item.id !== id) : current.periodRecords,
+      symptomRecords: type === 'symptom' ? current.symptomRecords.filter((item) => item.id !== id) : current.symptomRecords,
+    }));
+    const label = type === 'sex' ? '亲密记录' : type === 'period' ? '经期记录' : '症状记录';
+    showNotice(`已删除${label}`, { label: '撤销', run: () => restoreRecord(type, record) }, 5000);
+  }
+
+  function restoreRecord(type: RecordType, record: SexRecord | PeriodRecord | SymptomRecord) {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    patchState((current) => ({
+      ...current,
+      sexRecords: type === 'sex' ? [...current.sexRecords, record as SexRecord] : current.sexRecords,
+      periodRecords: type === 'period' ? [...current.periodRecords, record as PeriodRecord] : current.periodRecords,
+      symptomRecords: type === 'symptom' ? [...current.symptomRecords, record as SymptomRecord] : current.symptomRecords,
+    }));
+    setNotice(null);
+  }
+
+  function clearRecords() {
+    Alert.alert('重置所有数据', '将永久删除全部亲密、经期和症状记录（含首次启动的演示数据），无法撤销。确定继续？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '清空',
+        style: 'destructive',
+        onPress: () => patchState((current) => ({ ...current, sexRecords: [], periodRecords: [], symptomRecords: [] })),
+      },
+    ]);
+  }
+
+  async function handleCheckUpdate() {
+    if (isCheckingUpdate) return;
+    setIsCheckingUpdate(true);
+    try {
+      const result = await checkLatestAppUpdate();
+      setUpdateInfo(result.info);
+      setUpdateDiagnostics(result.diagnostics);
+      if (result.info.status === 'available') {
+        showNotice(`发现新版本 ${result.info.latestVersion}`);
+      } else if (result.info.status === 'latest') {
+        showNotice('当前已经是最新版本');
+      } else {
+        showNotice('检查更新失败，请稍后再试');
+      }
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }
+
+  function openAbout() {
+    setFabOpen(false);
+    setAboutOpen(true);
+  }
+
+  async function openExternalUrl(url?: string) {
+    if (!url) {
+      showNotice('暂无可打开的链接');
+      return;
+    }
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        showNotice('当前环境无法打开链接');
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      showNotice('打开链接失败');
+    }
+  }
+
+  function openSheet(type: SheetType) {
+    setFabOpen(false);
+    setEditingSexRecord(null);
+    setEditingPeriodRecord(null);
+    setEditingSymptomRecord(null);
+    setSheetType(type);
+  }
+
+  function openSexEditor(record: SexRecord) {
+    setFabOpen(false);
+    setEditingSexRecord(record);
+    setEditingPeriodRecord(null);
+    setEditingSymptomRecord(null);
+    setSheetType(sexSheetTypeForRecord(record));
+  }
+
+  function openPeriodEditor(record: PeriodRecord) {
+    setFabOpen(false);
+    setEditingSexRecord(null);
+    setEditingPeriodRecord(record);
+    setEditingSymptomRecord(null);
+    setSheetType('period');
+  }
+
+  function openSymptomEditor(record: SymptomRecord) {
+    setFabOpen(false);
+    setEditingSexRecord(null);
+    setEditingPeriodRecord(null);
+    setEditingSymptomRecord(record);
+    setSheetType('symptom');
+  }
+
+  function closeSheet() {
+    setSheetType(null);
+    setEditingSexRecord(null);
+    setEditingPeriodRecord(null);
+    setEditingSymptomRecord(null);
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar style="dark" />
+      <View style={Platform.OS === 'web' ? styles.webStage : styles.nativeStage}>
+        <View style={Platform.OS === 'web' ? styles.webPhoneFrame : styles.nativeFrame}>
+          <View style={styles.appContainer}>
+            <LinearGradient colors={colors.appGradient} style={StyleSheet.absoluteFill} />
+
+            <View style={styles.header}>
+              <View style={styles.greeting}>
+                <Text style={styles.dateLabel}>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(today)}</Text>
+                <Text style={styles.title}>{state.settings.privacyMode ? '已隐藏' : currentCopy.title}</Text>
+                <Text style={styles.subtitle}>{currentCopy.subtitle}</Text>
+              </View>
+              <View style={styles.headerActions}>
+                <Pressable
+                  style={styles.headerIconButton}
+                  onPress={() =>
+                    patchState((current) => ({
+                      ...current,
+                      settings: { ...current.settings, privacyMode: !current.settings.privacyMode },
+                    }))
+                  }
+                >
+                  {state.settings.privacyMode ? <EyeOff color={colors.primary} size={20} /> : <Eye color={colors.primary} size={20} />}
+                </Pressable>
+                <Pressable style={styles.avatarButton} onPress={openAbout}>
+                  <LinearGradient colors={colors.avatarGradient} style={styles.avatar}>
+                    <Info color="#fff" size={21} strokeWidth={2.7} />
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </View>
+
+            <ScrollView style={styles.mainContent} contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+              {!loaded && <HomeSkeleton />}
+              {loaded && screen === 'home' && (
+                <HomeScreen
+                  state={state}
+                  stats={stats}
+                  cycleInfo={cycleInfo}
+                  timeline={timeline}
+                  onDelete={deleteRecord}
+                  onEditSex={openSexEditor}
+                  onEditPeriod={openPeriodEditor}
+                  onEditSymptom={openSymptomEditor}
+                />
+              )}
+              {loaded && screen === 'calendar' && (
+                <CalendarScreen
+                  state={state}
+                  visibleMonth={visibleMonth}
+                  cycleInfo={cycleInfo}
+                  selectedDateKey={selectedCalendarDate}
+                  onMonthChange={setVisibleMonth}
+                  onSelectDate={(date) => setSelectedCalendarDate(toDateKey(date))}
+                  onPatch={(updater) => patchState(updater)}
+                  onEditSex={openSexEditor}
+                />
+              )}
+              {loaded && screen === 'insights' && <InsightsScreen state={state} stats={stats} cycleInfo={cycleInfo} range={statsRange} onRangeChange={setStatsRange} />}
+              {loaded && screen === 'settings' && (
+                <SettingsScreen
+                  state={state}
+                  onPatch={(settings) => patchState((current) => ({ ...current, settings: { ...current.settings, ...settings } }))}
+                  onClear={clearRecords}
+                />
+              )}
+            </ScrollView>
+
+            {screen !== 'insights' && fabOpen && (
+              <Pressable style={styles.fabBackdrop} onPress={() => setFabOpen(false)}>
+                <View style={styles.fabMenu}>
+                  <FabMenuItem primary type="partneredSex" desc="伴侣、保护措施、姿势和心情" onPress={() => openSheet('partneredSex')} />
+                  <FabMenuItem type="soloSex" desc="道具、观看、高潮和评分" onPress={() => openSheet('soloSex')} />
+                  <FabMenuItem type="period" desc="开始、结束、流量和痛经" onPress={() => openSheet('period')} />
+                  <FabMenuItem type="symptom" desc="身体和情绪变化" onPress={() => openSheet('symptom')} />
+                </View>
+              </Pressable>
+            )}
+
+            {screen !== 'insights' && (
+              <Pressable style={styles.fab} onPress={() => setFabOpen((current) => !current)}>
+                <LinearGradient colors={fabOpen ? [colors.secondary, colors.primaryLight] : colors.avatarGradient} style={styles.fabGradient}>
+                  {fabOpen ? <X color="#fff" size={27} strokeWidth={2.7} /> : <Plus color="#fff" size={29} strokeWidth={2.7} />}
+                </LinearGradient>
+              </Pressable>
+            )}
+
+            {notice && (
+              <View style={styles.snackbar}>
+                <Text style={styles.snackbarText}>{notice.message}</Text>
+                {notice.action && (
+                  <Pressable style={styles.snackbarAction} onPress={notice.action.run}>
+                    <Text style={styles.snackbarActionText}>{notice.action.label}</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            <AboutScreen
+              visible={aboutOpen}
+              updateInfo={updateInfo}
+              diagnostics={updateDiagnostics}
+              checking={isCheckingUpdate}
+              onClose={() => setAboutOpen(false)}
+              onCheckUpdate={handleCheckUpdate}
+              onOpenUrl={openExternalUrl}
+            />
+
+            <View style={styles.bottomNav}>
+              <NavItem active={screen === 'home'} label="首页" Icon={Home} onPress={() => setScreen('home')} />
+              <NavItem active={screen === 'calendar'} label="日历" Icon={CalendarDays} onPress={() => setScreen('calendar')} />
+              <NavItem active={screen === 'insights'} label="统计" Icon={BarChart3} onPress={() => setScreen('insights')} />
+              <NavItem active={screen === 'settings'} label="设置" Icon={Settings} onPress={() => setScreen('settings')} />
+            </View>
+
+            <EntrySheet
+              type={sheetType}
+              editingSexRecord={editingSexRecord}
+              editingPeriodRecord={editingPeriodRecord}
+              editingSymptomRecord={editingSymptomRecord}
+              onClose={closeSheet}
+              onSaveSex={(record) => {
+                patchState((current) => ({
+                  ...current,
+                  sexRecords: editingSexRecord
+                    ? current.sexRecords.map((item) => (item.id === record.id ? record : item))
+                    : [...current.sexRecords, record],
+                }));
+                showNotice(editingSexRecord ? '已保存修改' : '已保存');
+              }}
+              onSavePeriod={(record) => {
+                patchState((current) => ({
+                  ...current,
+                  periodRecords: editingPeriodRecord
+                    ? current.periodRecords.map((item) => (item.id === record.id ? record : item))
+                    : [...current.periodRecords, record],
+                }));
+                showNotice(editingPeriodRecord ? '已保存修改' : '已保存');
+              }}
+              onSaveSymptom={(record) => {
+                patchState((current) => ({
+                  ...current,
+                  symptomRecords: editingSymptomRecord
+                    ? current.symptomRecords.map((item) => (item.id === record.id ? record : item))
+                    : [...current.symptomRecords, record],
+                }));
+                showNotice(editingSymptomRecord ? '已保存修改' : '已保存');
+              }}
+            />
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function HomeScreen({
+  state,
+  stats,
+  cycleInfo,
+  timeline,
+  onDelete,
+  onEditSex,
+  onEditPeriod,
+  onEditSymptom,
+}: {
+  state: AppState;
+  stats: ReturnType<typeof buildStats>;
+  cycleInfo: CycleInfo;
+  timeline: TimelineItem[];
+  onDelete: (type: RecordType, id: string) => void;
+  onEditSex: (record: SexRecord) => void;
+  onEditPeriod: (record: PeriodRecord) => void;
+  onEditSymptom: (record: SymptomRecord) => void;
+}) {
+  const cycleStatus = getCycleStatus(state, cycleInfo);
+  const [filter, setFilter] = useState<'all' | RecordType>('all');
+  const [showAll, setShowAll] = useState(false);
+  const filterOptions: Array<{ value: 'all' | RecordType; label: string }> = [
+    { value: 'all', label: '全部' },
+    { value: 'sex', label: '亲密' },
+    { value: 'period', label: '经期' },
+    { value: 'symptom', label: '症状' },
+  ];
+  const filtered = filter === 'all' ? timeline : timeline.filter((item) => item.type === filter);
+  const visible = showAll ? filtered : filtered.slice(0, 20);
+  return (
+    <View>
+      <LinearGradient colors={colors.heroGradient} style={styles.heroCard}>
+        <View style={styles.heroCopy}>
+          <Text style={styles.heroPill}>{cycleStatus.pill}</Text>
+          <Text style={styles.heroTitle}>{cycleStatus.title}</Text>
+          <Text style={styles.heroHint}>{cycleStatus.hint}</Text>
+        </View>
+        <LinearGradient colors={colors.bubbleGradient} style={styles.cycleBubble}>
+          <Text style={styles.cycleDay}>{cycleInfo ? cycleInfo.normalizedDay : '--'}</Text>
+          <Text style={styles.cycleDayLabel}>day</Text>
+        </LinearGradient>
+      </LinearGradient>
+
+      <View style={styles.quickGrid}>
+        <MetricCard label="本月" value={String(stats.monthSexCount)} hint="性生活次数" />
+        <MetricCard label="间隔" value={String(stats.averageGap)} hint="平均天数" />
+        <MetricCard label="周期" value={String(cycleInfo?.cycleLength ?? state.settings.cycleDays)} hint={cycleInfo?.confidence === 'high' ? '实测平均' : '预测天数'} />
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>最近记录</Text>
+      </View>
+
+      {timeline.length > 0 && (
+        <View style={styles.filterRail}>
+          {filterOptions.map((option) => {
+            const active = filter === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                style={[styles.sheetChip, active && styles.sheetChipActive]}
+                onPress={() => {
+                  setFilter(option.value);
+                  setShowAll(false);
+                }}
+              >
+                <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {timeline.length ? (
+        filtered.length ? (
+          <>
+            {visible.map((item) => (
+              <RecordCard
+                key={`${item.type}-${item.id}`}
+                item={item}
+                privacy={state.settings.privacyMode}
+                sexRecord={item.type === 'sex' ? state.sexRecords.find((record) => record.id === item.id) : undefined}
+                periodRecord={item.type === 'period' ? state.periodRecords.find((record) => record.id === item.id) : undefined}
+                symptomRecord={item.type === 'symptom' ? state.symptomRecords.find((record) => record.id === item.id) : undefined}
+                onDelete={onDelete}
+                onEditSex={onEditSex}
+                onEditPeriod={onEditPeriod}
+                onEditSymptom={onEditSymptom}
+              />
+            ))}
+            {filtered.length > visible.length && (
+              <Pressable style={styles.viewAllButton} onPress={() => setShowAll(true)}>
+                <Text style={styles.viewAllText}>查看全部 {filtered.length} 条</Text>
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <Text style={styles.empty}>该分类下还没有记录。</Text>
+        )
+      ) : (
+        <Text style={styles.empty}>还没有记录。点右下角 + 开始添加。</Text>
+      )}
+    </View>
+  );
+}
+
+function HomeSkeleton() {
+  return (
+    <View>
+      <View style={styles.skeletonHero} />
+      <View style={styles.quickGrid}>
+        <View style={styles.skeletonMetric} />
+        <View style={styles.skeletonMetric} />
+        <View style={styles.skeletonMetric} />
+      </View>
+      <View style={styles.skeletonLineWide} />
+      {[0, 1, 2].map((index) => (
+        <View key={index} style={styles.skeletonCard}>
+          <View style={styles.skeletonCircle} />
+          <View style={styles.skeletonCardCopy}>
+            <View style={styles.skeletonLine} />
+            <View style={styles.skeletonLineShort} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function CalendarScreen({
+  state,
+  visibleMonth,
+  cycleInfo,
+  selectedDateKey,
+  onMonthChange,
+  onSelectDate,
+  onPatch,
+  onEditSex,
+}: {
+  state: AppState;
+  visibleMonth: Date;
+  cycleInfo: CycleInfo;
+  selectedDateKey: string | null;
+  onMonthChange: (date: Date) => void;
+  onSelectDate: (date: Date) => void;
+  onPatch: (updater: (current: AppState) => AppState) => void;
+  onEditSex: (record: SexRecord) => void;
+}) {
+  const days = buildCalendarDays(visibleMonth);
+  const monthTitle = monthLabel(visibleMonth);
+  const prediction = cycleInfo ? `下次经期预计 ${shortDate(cycleInfo.nextPeriod)} 开始` : '添加经期开始日后显示预测';
+  const selectedDate = selectedDateKey ? parseDateKey(selectedDateKey) : new Date();
+  const selectedRelative = relativeDateLabel(selectedDate);
+  const selectedStatus = getDayCycleStatus(selectedDate, state, cycleInfo);
+  const SelectedStatusIcon = selectedStatus.Icon;
+  const selectedSexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === toDateKey(selectedDate));
+  const selectedInFuture = startOfDay(selectedDate) > startOfDay(new Date());
+  const selectedPeriod = findPeriodForDate(state, selectedDate);
+  const canMarkPeriodStart = !selectedInFuture && !selectedPeriod;
+  const canMarkPeriodEnd = !selectedInFuture && state.periodRecords.some((record) => record.startDate <= toDateKey(selectedDate));
+
+  function markPeriodStart() {
+    if (!canMarkPeriodStart) return;
+    const key = toDateKey(selectedDate);
+    onPatch((current) => ({
+      ...current,
+      periodRecords: [
+        ...current.periodRecords,
+        {
+          id: uid('period'),
+          startDate: key,
+          endDate: toDateKey(addDays(selectedDate, current.settings.periodDays - 1)),
+          flow: 'medium',
+          painLevel: 0,
+          symptoms: [],
+        },
+      ],
+    }));
+  }
+
+  function markPeriodEnd() {
+    if (!canMarkPeriodEnd) return;
+    const key = toDateKey(selectedDate);
+    onPatch((current) => {
+      const records = [...current.periodRecords].sort((left, right) => left.startDate.localeCompare(right.startDate));
+      const periodAtDate = findPeriodForDate(current, selectedDate);
+      const index = periodAtDate
+        ? records.findIndex((record) => record.id === periodAtDate.id)
+        : records.findLastIndex((record) => record.startDate <= key);
+      if (index < 0) return current;
+      records[index] = { ...records[index], endDate: key };
+      return { ...current, periodRecords: records };
+    });
+  }
+
+  function cancelSelectedPeriod() {
+    if (!selectedPeriod) return;
+    onPatch((current) => ({
+      ...current,
+      periodRecords: current.periodRecords.filter((record) => record.id !== selectedPeriod.id),
+    }));
+  }
+
+  return (
+    <View>
+      <View style={styles.dayStatusCard}>
+        <View style={styles.dayStatusHead}>
+          <LinearGradient colors={selectedStatus.colors} style={styles.dayStatusIcon}>
+            <SelectedStatusIcon color="#fff" size={20} strokeWidth={2.6} />
+          </LinearGradient>
+          <View style={styles.dayStatusCopy}>
+            <View style={styles.calendarSelectedTitle}>
+              <Text style={styles.dayStatusTitle}>{shortDate(selectedDate)}</Text>
+              <Text
+                style={[
+                  styles.calendarRelativePill,
+                  selectedRelative.tone === 'today' && styles.calendarRelativeToday,
+                  selectedRelative.tone === 'past' && styles.calendarRelativePast,
+                  selectedRelative.tone === 'future' && styles.calendarRelativeFuture,
+                ]}
+              >
+                {selectedRelative.label}
+              </Text>
+            </View>
+            <Text style={styles.dayStatusText}>{selectedStatus.title} · {selectedStatus.detail}</Text>
+          </View>
+        </View>
+        <View style={styles.calendarDayMetrics}>
+          <View style={styles.calendarMetric}>
+            <Text style={styles.calendarMetricValue}>{selectedSexRecords.length}</Text>
+            <Text style={styles.calendarMetricLabel}>亲密</Text>
+          </View>
+          <View style={styles.calendarMetric}>
+            <Text style={styles.calendarMetricValue}>{selectedPeriod ? 1 : 0}</Text>
+            <Text style={styles.calendarMetricLabel}>经期</Text>
+          </View>
+          <View style={styles.calendarMetric}>
+            <Text style={styles.calendarMetricValue}>{selectedStatus.title.includes('排卵') ? 1 : 0}</Text>
+            <Text style={styles.calendarMetricLabel}>排卵</Text>
+          </View>
+        </View>
+        <View style={styles.dayStatusActions}>
+          <Pressable style={[styles.dayStatusButton, !canMarkPeriodStart && styles.dayStatusButtonDisabled]} onPress={markPeriodStart}>
+            <Text style={[styles.dayStatusButtonText, !canMarkPeriodStart && styles.dayStatusButtonTextDisabled]}>
+              {selectedInFuture ? '未来不可标记开始' : selectedPeriod ? '已在经期内' : '标记经期开始'}
+            </Text>
+          </Pressable>
+          <Pressable style={[styles.dayStatusButton, !canMarkPeriodEnd && styles.dayStatusButtonDisabled]} onPress={markPeriodEnd}>
+            <Text style={[styles.dayStatusButtonText, !canMarkPeriodEnd && styles.dayStatusButtonTextDisabled]}>
+              {selectedInFuture ? '未来不可标记结束' : '标记经期结束'}
+            </Text>
+          </Pressable>
+        </View>
+        {selectedPeriod && (
+          <Pressable style={styles.dayStatusCancelButton} onPress={cancelSelectedPeriod}>
+            <Text style={styles.dayStatusCancelText}>取消本次经期记录</Text>
+          </Pressable>
+        )}
+        <View style={styles.daySexSection}>
+          <Text style={styles.daySexTitle}>当天性生活</Text>
+          {selectedSexRecords.length ? (
+            selectedSexRecords.map((record) => {
+              const kind = getSexKindMeta(record);
+              const KindIcon = kind.Icon;
+              return (
+                <Pressable style={styles.daySexRow} key={record.id} onPress={() => onEditSex(record)}>
+                  <LinearGradient colors={kind.colors} style={styles.daySexIcon}>
+                    <KindIcon color="#fff" size={16} strokeWidth={2.6} />
+                  </LinearGradient>
+                  <View style={styles.daySexCopy}>
+                    <Text style={styles.daySexMain}>{new Date(record.dateTime).toTimeString().slice(0, 5)} · {kind.label} · {record.count} 次</Text>
+                    <Text style={styles.daySexMeta}>
+                      {[record.sexTypes?.join('、') || record.sexType, record.durationMinutes ? `${record.durationMinutes} 分钟` : '', record.protectionMethods?.join('、') || record.protection]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </View>
+                  <Pencil color={colors.primary} size={15} strokeWidth={2.5} />
+                </Pressable>
+              );
+            })
+          ) : (
+            <Text style={styles.daySexEmpty}>这一天还没有性生活记录</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.calendarShell}>
+        <View style={styles.calendarHeader}>
+        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>
+          <ChevronLeft color={colors.primary} size={21} strokeWidth={2.7} />
+        </Pressable>
+        <View style={styles.calendarTitleBox}>
+          <Text style={styles.calendarTitle}>{monthTitle}</Text>
+          <Text style={styles.calendarWeekLine}>{prediction}</Text>
+          <Text style={styles.calendarDateLine}>{longDate(selectedDate)}</Text>
+        </View>
+        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>
+          <ChevronRight color={colors.primary} size={21} strokeWidth={2.7} />
+        </Pressable>
+        </View>
+
+        <View style={styles.calendarTodayRow}>
+          <Pressable style={styles.calendarTodayButton} onPress={() => {
+            const now = new Date();
+            onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
+            onSelectDate(now);
+          }}>
+            <Text style={styles.calendarTodayText}>回到今天</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.weekdayGrid}>
+          {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
+            <Text style={styles.weekday} key={day}>
+              {day}
+            </Text>
+          ))}
+        </View>
+        <View style={styles.calendarGrid}>
+          {days.map((date) => (
+            <CalendarDay
+              key={date.toISOString()}
+              date={date}
+              visibleMonth={visibleMonth}
+              state={state}
+              cycleInfo={cycleInfo}
+              selected={toDateKey(date) === toDateKey(selectedDate)}
+              onPress={() => onSelectDate(date)}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.legendRowBottom}>
+        <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
+        <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
+        <IconLegend color={colors.period} Icon={Droplet} label="经期" />
+        <IconLegend color={colors.secondary} Icon={Moon} label="经前期" />
+        <IconLegend color={colors.primary} Icon={CircleDot} label="排卵日" />
+        <IconLegend color={colors.green} Icon={Activity} label="易孕期" />
+        <IconLegend color={colors.gold} Icon={CalendarDays} label="预测" />
+      </View>
+    </View>
+  );
+}
+
+function InsightsScreen({
+  state,
+  stats,
+  cycleInfo,
+  range,
+  onRangeChange,
+}: {
+  state: AppState;
+  stats: ReturnType<typeof buildStats>;
+  cycleInfo: CycleInfo;
+  range: 'week' | 'month' | 'year';
+  onRangeChange: (range: 'week' | 'month' | 'year') => void;
+}) {
+  const chart = buildSexChart(state, range);
+  const durationStats = buildDurationStats(state, range);
+  const timeDistribution = buildTimeDistribution(state, range);
+  const distributionTotal = timeDistribution.reduce((sum, item) => sum + item.count, 0);
+  const chartMax = getChartMax(chart, range);
+  const midTick = Math.round(chartMax / 2);
+  const totalCount = chart.reduce((sum, item) => sum + item.count, 0);
+  const chartHeight = 160;
+  const symptomCounts = buildSymptomCounts(state);
+  return (
+    <View>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>趋势</Text>
+      </View>
+      <View style={styles.segmentedControl}>
+        <RangeButton active={range === 'week'} label="按周查看" onPress={() => onRangeChange('week')} />
+        <RangeButton active={range === 'month'} label="按月查看" onPress={() => onRangeChange('month')} />
+        <RangeButton active={range === 'year'} label="按年查看" onPress={() => onRangeChange('year')} />
+      </View>
+      <View style={[styles.panel, styles.sexChartPanel]}>
+        <View style={styles.bigMetricRow}>
+          <Text style={styles.bigMetric}>{totalCount}</Text>
+          <Text style={styles.bigMetricUnit}>次</Text>
+        </View>
+        <View style={styles.columnChart}>
+          <View style={styles.chartAxis}>
+            <Text style={styles.chartAxisLabel}>{chartMax}</Text>
+            <Text style={styles.chartAxisLabel}>{midTick}</Text>
+            <Text style={styles.chartAxisLabel}>0</Text>
+          </View>
+          <View style={styles.chartPlot}>
+            <View style={styles.chartGridArea}>
+              <View style={[styles.chartGridLine, styles.chartGridLineTop]} />
+              <View style={[styles.chartGridLine, styles.chartGridLineMid]} />
+              <View style={[styles.chartGridLine, styles.chartGridLineBase]} />
+            </View>
+            <View style={[styles.columnRow, range === 'month' && styles.columnRowDense]}>
+              {chart.map((item, index) => {
+                const barHeight = item.count ? Math.max(8, Math.round((item.count / chartMax) * chartHeight)) : 0;
+                return (
+                  <View style={styles.columnSlot} key={`${item.label}-${index}`}>
+                    <View style={[styles.columnTrack, range === 'week' && styles.columnTrackWeek, range === 'month' && styles.columnTrackMonth]}>
+                      <View style={[styles.columnStack, { height: barHeight }]}>
+                        {item.soloCount > 0 && <View style={[styles.columnPart, styles.columnPartSolo, { flex: item.soloCount }]} />}
+                        {item.partneredCount > 0 && <View style={[styles.columnPart, styles.columnPartPartnered, { flex: item.partneredCount }]} />}
+                      </View>
+                    </View>
+                    <Text style={styles.columnLabel}>{item.label}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+        <View style={styles.chartLegendRow}>
+          <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
+          <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
+        </View>
+      </View>
+      <Panel title="持续时间">
+        <View style={styles.durationHeader}>
+          <Text style={styles.durationHeaderLabel}>总时长</Text>
+          <Text style={styles.durationHeaderValue}>{formatDuration(durationStats.totalMinutes)}</Text>
+        </View>
+        <StatLine Icon={Hourglass} label="最长一次" value={formatDuration(durationStats.maxMinutes)} />
+        <StatLine Icon={Activity} label="最短一次" value={formatDuration(durationStats.minMinutes)} />
+        <StatLine Icon={BarChart3} label="平均" value={formatDuration(durationStats.averageMinutes)} />
+      </Panel>
+      <Panel title="时间分布">
+        <View style={styles.distributionBar}>
+          {distributionTotal ? (
+            timeDistribution.map((item) => (
+              <View key={item.label} style={[styles.distributionSegment, { flex: item.count || 0.001, backgroundColor: item.color }]} />
+            ))
+          ) : (
+            <View style={styles.distributionEmptySegment} />
+          )}
+        </View>
+        <View style={styles.distributionList}>
+          {timeDistribution.map((item) => (
+            <View style={styles.distributionRow} key={item.label}>
+              <View style={[styles.distributionDot, { backgroundColor: item.color }]} />
+              <Text style={styles.distributionLabel}>{item.label}</Text>
+              <Text style={styles.distributionValue}>{item.count} 条记录</Text>
+            </View>
+          ))}
+        </View>
+      </Panel>
+      <Panel title="月经周期">
+        <View style={styles.summaryGrid}>
+          <SummaryTile label="记录次数" value={String(state.periodRecords.length)} />
+          <SummaryTile label="平均周期" value={String(stats.averageCycle)} />
+          <SummaryTile label="平均经期" value={String(stats.averagePeriod)} />
+          <SummaryTile label="下次预测" value={cycleInfo ? shortDate(cycleInfo.nextPeriod) : '--'} />
+        </View>
+      </Panel>
+      <Panel title="症状和情绪">
+        <View style={styles.tagCloud}>
+          {symptomCounts.length ? (
+            symptomCounts.map(([name, count]) => (
+              <Text style={styles.tag} key={name}>
+                {name} x {count}
+              </Text>
+            ))
+          ) : (
+            <Text style={styles.emptyInline}>还没有症状记录</Text>
+          )}
+        </View>
+      </Panel>
+    </View>
+  );
+}
+
+function SettingsScreen({ state, onPatch, onClear }: { state: AppState; onPatch: (settings: Partial<AppState['settings']>) => void; onClear: () => void }) {
+  return (
+    <View>
+      <View style={styles.profileCard}>
+        <LinearGradient colors={colors.avatarGradient} style={styles.profilePhoto}>
+          <Moon color="#fff" size={28} />
+        </LinearGradient>
+        <View style={styles.profileMain}>
+          <Text style={styles.profileTitle}>Luna Log</Text>
+          <Text style={styles.profileDesc}>本地优先的私密生活记录 Demo</Text>
+          <View style={styles.tagCloud}>
+            <Text style={styles.tag}>Android / iOS</Text>
+            <Text style={[styles.tag, styles.dangerTag]}>隐私模式</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.settingRow}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.settingTitle}>隐私模式</Text>
+          <Text style={styles.settingHint}>隐藏标题和时间线细节</Text>
+        </View>
+        <Switch value={state.settings.privacyMode} onValueChange={(privacyMode) => onPatch({ privacyMode })} />
+      </View>
+      <View style={styles.themePanel}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.settingTitle}>视觉风格</Text>
+          <Text style={styles.settingHint}>原版、薄荷和参考深海冷光图片的蓝色主题</Text>
+        </View>
+        <View style={styles.themeOptionGrid}>
+          {themeOptions.map((option) => {
+            const theme = themePalettes[option.value];
+            const active = (state.settings.themeStyle || 'classic') === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                style={[styles.themeOption, active && styles.themeOptionActive]}
+                onPress={() => onPatch({ themeStyle: option.value })}
+              >
+                <LinearGradient colors={theme.avatarGradient} style={styles.themeSwatch} />
+                <View style={styles.themeOptionCopy}>
+                  <Text style={[styles.themeOptionTitle, active && styles.themeOptionTitleActive]}>{option.label}</Text>
+                  <Text style={styles.themeOptionHint}>{option.hint}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+      <NumberSetting label="周期长度" hint="经期记录不足 3 次时的默认预测值" value={state.settings.cycleDays} onChange={(cycleDays) => onPatch({ cycleDays })} />
+      <NumberSetting label="经期天数" hint="用于日历经期标记" value={state.settings.periodDays} onChange={(periodDays) => onPatch({ periodDays })} />
+
+      <Pressable style={styles.dangerRow} onPress={onClear}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.dangerRowTitle}>重置所有数据</Text>
+          <Text style={styles.settingHint}>清空全部记录，含首次启动的演示数据</Text>
+        </View>
+        <Trash2 color={colors.danger} size={18} strokeWidth={2.5} />
+      </Pressable>
+    </View>
+  );
+}
+
+function AboutScreen({
+  visible,
+  updateInfo,
+  diagnostics,
+  checking,
+  onClose,
+  onCheckUpdate,
+  onOpenUrl,
+}: {
+  visible: boolean;
+  updateInfo: AppUpdateInfo | null;
+  diagnostics: UpdateSourceDiagnostic[];
+  checking: boolean;
+  onClose: () => void;
+  onCheckUpdate: () => void;
+  onOpenUrl: (url?: string) => void;
+}) {
+  if (!visible) return null;
+
+  const latestRelease = RELEASE_NOTES[0];
+  const statusLabel = checking
+    ? '正在检查'
+    : updateInfo?.status === 'available'
+      ? `发现 ${updateInfo.latestVersion}`
+      : updateInfo?.status === 'latest'
+        ? '当前最新'
+        : updateInfo?.status === 'failed'
+          ? '检查失败'
+          : '尚未检查';
+  const statusStyle =
+    updateInfo?.status === 'available'
+      ? styles.updateStatusAvailable
+      : updateInfo?.status === 'failed'
+        ? styles.updateStatusFailed
+        : styles.updateStatusLatest;
+  const primaryUrl = updateInfo?.downloadUrl || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
+
+  return (
+    <View style={styles.aboutOverlay}>
+      <LinearGradient colors={colors.appGradient} style={StyleSheet.absoluteFill} />
+      <View style={styles.aboutHeader}>
+        <View style={styles.aboutHeaderCopy}>
+          <Text style={styles.dateLabel}>关于 Luna Log</Text>
+          <Text style={styles.aboutTitle}>版本和更新</Text>
+        </View>
+        <Pressable style={styles.sheetClose} onPress={onClose}>
+          <X color={colors.text} size={20} strokeWidth={2.7} />
+        </Pressable>
+      </View>
+
+      <ScrollView style={styles.aboutScroll} contentContainerStyle={styles.aboutBody} showsVerticalScrollIndicator={false}>
+        <View style={styles.aboutHeroCard}>
+          <LinearGradient colors={colors.avatarGradient} style={styles.aboutAppIcon}>
+            <Moon color="#fff" size={30} strokeWidth={2.5} />
+          </LinearGradient>
+          <View style={styles.aboutHeroCopy}>
+            <Text style={styles.profileTitle}>Luna Log</Text>
+            <Text style={styles.profileDesc}>本地优先的私密生活记录 Demo</Text>
+            <View style={styles.tagCloud}>
+              <Text style={styles.tag}>v{APP_VERSION}</Text>
+              <Text style={styles.tag}>Expo SDK 57</Text>
+              <Text style={styles.tag}>Android / iOS</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.updateCard}>
+          <View style={styles.updateCardHeader}>
+            <View style={styles.updateTitleRow}>
+              <View style={styles.updateIconBubble}>
+                <RefreshCw color={colors.primary} size={19} strokeWidth={2.7} />
+              </View>
+              <View style={styles.settingCopy}>
+                <Text style={styles.settingTitle}>检查更新</Text>
+                <Text style={styles.settingHint}>参考 LifeLog 的多源清单检查和诊断信息</Text>
+              </View>
+            </View>
+            <Text style={[styles.updateStatusPill, statusStyle]}>{statusLabel}</Text>
+          </View>
+
+          <View style={styles.updateMetaGrid}>
+            <UpdateMeta label="当前版本" value={`v${APP_VERSION}`} />
+            <UpdateMeta label="最新版本" value={updateInfo ? `v${updateInfo.latestVersion}` : '--'} />
+            <UpdateMeta label="发布日期" value={formatUpdateDate(updateInfo?.releaseDate)} />
+            <UpdateMeta label="安装包" value={formatFileSize(updateInfo?.fileSize)} />
+          </View>
+
+          {updateInfo && (
+            <View style={styles.updateDetailBox}>
+              <Text style={styles.updateDetailTitle}>{updateInfo.title}</Text>
+              <Text style={styles.updateDetailMeta}>
+                {updateInfo.sourceName ? `${updateInfo.sourceName} · ` : ''}
+                {formatCheckedAt(updateInfo.checkedAt)}
+              </Text>
+              {updateInfo.notes.map((note) => (
+                <View key={note} style={styles.releaseBulletRow}>
+                  <View style={styles.releaseBulletDot} />
+                  <Text style={styles.releaseBulletText}>{note}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.updateActionRow}>
+            <Pressable style={[styles.updateActionButton, styles.updateActionPrimary]} onPress={onCheckUpdate} disabled={checking}>
+              {checking ? <ActivityIndicator color="#fff" size="small" /> : <RefreshCw color="#fff" size={17} strokeWidth={2.7} />}
+              <Text style={styles.updateActionPrimaryText}>{checking ? '检查中' : '检查'}</Text>
+            </Pressable>
+            <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(primaryUrl)}>
+              {updateInfo?.status === 'available' ? (
+                <Download color={colors.primary} size={17} strokeWidth={2.7} />
+              ) : (
+                <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
+              )}
+              <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '下载更新' : '项目主页'}</Text>
+            </Pressable>
+          </View>
+
+          {diagnostics.length > 0 && (
+            <View style={styles.updateDiagnostics}>
+              <Text style={styles.updateDiagnosticsTitle}>来源诊断</Text>
+              {diagnostics.map((item) => (
+                <View key={`${item.sourceName}-${item.durationMs}`} style={styles.updateDiagnosticRow}>
+                  <View style={[styles.updateDiagnosticDot, item.status === 'success' ? styles.updateDiagnosticDotOk : styles.updateDiagnosticDotBad]} />
+                  <View style={styles.settingCopy}>
+                    <Text style={styles.updateDiagnosticName}>
+                      {item.sourceName}
+                      {item.version ? ` · v${item.version}` : ''}
+                    </Text>
+                    <Text style={styles.updateDiagnosticMessage}>
+                      {item.message} · {item.durationMs}ms
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.releaseCard}>
+          <View style={styles.updateTitleRow}>
+            <View style={styles.updateIconBubble}>
+              <Sparkles color={colors.primary} size={19} strokeWidth={2.7} />
+            </View>
+            <View style={styles.settingCopy}>
+              <Text style={styles.settingTitle}>版本说明</Text>
+              <Text style={styles.settingHint}>{latestRelease.date} · {latestRelease.title}</Text>
+            </View>
+          </View>
+          {latestRelease.highlights.map((item) => (
+            <View key={item} style={styles.releaseBulletRow}>
+              <View style={styles.releaseBulletDot} />
+              <Text style={styles.releaseBulletText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function UpdateMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.updateMetaItem}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.updateMetaValue}>{value}</Text>
+    </View>
+  );
+}
+
+function EntrySheet({
+  type,
+  editingSexRecord,
+  editingPeriodRecord,
+  editingSymptomRecord,
+  onClose,
+  onSaveSex,
+  onSavePeriod,
+  onSaveSymptom,
+}: {
+  type: SheetType | null;
+  editingSexRecord?: SexRecord | null;
+  editingPeriodRecord?: PeriodRecord | null;
+  editingSymptomRecord?: SymptomRecord | null;
+  onClose: () => void;
+  onSaveSex: (record: SexRecord) => void;
+  onSavePeriod: (record: PeriodRecord) => void;
+  onSaveSymptom: (record: SymptomRecord) => void;
+}) {
+  const [date, setDate] = useState(toDateKey(new Date()));
+  const [time, setTime] = useState('12:00');
+  const [count, setCount] = useState('1');
+  const [duration, setDuration] = useState('');
+  const [partnerAlias, setPartnerAlias] = useState('');
+  const [sexTypes, setSexTypes] = useState<string[]>(['亲密接触']);
+  const [protectionMethods, setProtectionMethods] = useState<string[]>(['避孕套']);
+  const [place, setPlace] = useState('');
+  const [mood, setMood] = useState('');
+  const [satisfaction, setSatisfaction] = useState('4');
+  const [arousal, setArousal] = useState(false);
+  const [partnerArousal, setPartnerArousal] = useState(false);
+  const [orgasm, setOrgasm] = useState(false);
+  const [toyUsed, setToyUsed] = useState(false);
+  const [lingerie, setLingerie] = useState(false);
+  const [watchedAdultMovie, setWatchedAdultMovie] = useState(false);
+  const [syncedWithPartner, setSyncedWithPartner] = useState(false);
+  const [ejaculationPlace, setEjaculationPlace] = useState('');
+  const [initiator, setInitiator] = useState<'self' | 'partner'>('self');
+  const [positions, setPositions] = useState<string[]>([]);
+  const [soloTools, setSoloTools] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [flow, setFlow] = useState('medium');
+  const [pain, setPain] = useState('0');
+  const [symptoms, setSymptoms] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!type) return;
+    if (isSexSheet(type) && editingSexRecord) {
+      const value = new Date(editingSexRecord.dateTime);
+      setDate(toDateKey(value));
+      setTime(value.toTimeString().slice(0, 5));
+      setCount(String(editingSexRecord.count || 1));
+      setDuration(editingSexRecord.durationMinutes ? String(editingSexRecord.durationMinutes) : '');
+      setPartnerAlias(editingSexRecord.partnerAlias || '');
+      setSexTypes(editingSexRecord.sexTypes?.length ? editingSexRecord.sexTypes : editingSexRecord.sexType ? [editingSexRecord.sexType] : []);
+      setProtectionMethods(
+        editingSexRecord.protectionMethods?.length ? editingSexRecord.protectionMethods : editingSexRecord.protection ? [editingSexRecord.protection] : []
+      );
+      setPlace(editingSexRecord.place || '');
+      setMood(editingSexRecord.mood || '');
+      setSatisfaction(editingSexRecord.satisfaction ? String(editingSexRecord.satisfaction) : '');
+      setArousal(Boolean(editingSexRecord.arousal));
+      setPartnerArousal(Boolean(editingSexRecord.partnerArousal));
+      setOrgasm(Boolean(editingSexRecord.orgasm));
+      setToyUsed(Boolean(editingSexRecord.toyUsed));
+      setLingerie(Boolean(editingSexRecord.lingerie));
+      setWatchedAdultMovie(Boolean(editingSexRecord.watchedAdultMovie));
+      setSyncedWithPartner(Boolean(editingSexRecord.syncedWithPartner));
+      setEjaculationPlace(editingSexRecord.ejaculationPlace || '');
+      setInitiator(editingSexRecord.initiator || 'self');
+      setPositions(editingSexRecord.positions || []);
+      setSoloTools(editingSexRecord.soloTools || []);
+      setNotes(editingSexRecord.notes || '');
+      return;
+    }
+
+    if (type === 'period' && editingPeriodRecord) {
+      setDate(editingPeriodRecord.startDate);
+      setPeriodEnd(editingPeriodRecord.endDate || '');
+      setFlow(editingPeriodRecord.flow || 'medium');
+      setPain(String(editingPeriodRecord.painLevel || 0));
+      setSymptoms(editingPeriodRecord.symptoms || []);
+      setNotes(editingPeriodRecord.notes || '');
+      return;
+    }
+
+    if (type === 'symptom' && editingSymptomRecord) {
+      setDate(editingSymptomRecord.date);
+      setPain(String(editingSymptomRecord.intensity || 1));
+      setSymptoms(editingSymptomRecord.symptoms || []);
+      setNotes(editingSymptomRecord.notes || '');
+      return;
+    }
+
+    setDate(toDateKey(new Date()));
+    setTime('12:00');
+    setCount('1');
+    setDuration('');
+    setPartnerAlias('');
+    setSexTypes(type === 'soloSex' ? ['自慰'] : type === 'partneredSex' ? ['阴道性交'] : []);
+    setProtectionMethods(type === 'partneredSex' ? ['避孕套'] : []);
+    setPlace('');
+    setMood('');
+    setSatisfaction(isSexSheet(type) ? '4' : '');
+    setArousal(false);
+    setPartnerArousal(false);
+    setOrgasm(false);
+    setToyUsed(false);
+    setLingerie(false);
+    setWatchedAdultMovie(false);
+    setSyncedWithPartner(false);
+    setEjaculationPlace('');
+    setInitiator('self');
+    setPositions([]);
+    setSoloTools(type === 'soloSex' ? ['Hand Job'] : []);
+    setNotes('');
+    setPeriodEnd('');
+    setFlow('medium');
+    setPain('0');
+    setSymptoms([]);
+  }, [type, editingSexRecord, editingPeriodRecord, editingSymptomRecord]);
+
+  function toggleSymptom(value: string) {
+    setSymptoms((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+  }
+
+  function toggleSexType(value: string) {
+    setSexTypes((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+  }
+
+  function toggleProtection(value: string) {
+    setProtectionMethods((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+  }
+
+  function togglePosition(value: string) {
+    setPositions((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+  }
+
+  function toggleSoloTool(value: string) {
+    setSoloTools((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+  }
+
+  function save() {
+    if (!date || !type) return;
+    if (isSexSheet(type)) {
+      const normalizedSexTypes = type === 'soloSex' ? ['自慰', ...soloTools.filter((item) => item !== 'Hand Job')] : sexTypes;
+      onSaveSex({
+        id: editingSexRecord?.id || uid('sex'),
+        dateTime: new Date(`${date}T${time || '12:00'}:00`).toISOString(),
+        count: Number(count) || 1,
+        durationMinutes: duration ? Number(duration) : undefined,
+        partnerAlias: partnerAlias.trim(),
+        protectionMethods,
+        sexTypes: normalizedSexTypes,
+        place: place.trim(),
+        mood: mood.trim(),
+        satisfaction: satisfaction ? Number(satisfaction) : undefined,
+        arousal,
+        partnerArousal,
+        orgasm,
+        toyUsed,
+        lingerie,
+        watchedAdultMovie,
+        syncedWithPartner,
+        ejaculationPlace,
+        initiator,
+        positions,
+        soloTools,
+        notes: notes.trim(),
+      });
+    }
+    if (type === 'period') {
+      onSavePeriod({
+        id: editingPeriodRecord?.id || uid('period'),
+        startDate: date,
+        endDate: periodEnd,
+        flow,
+        painLevel: Number(pain) || 0,
+        symptoms,
+        notes: notes.trim(),
+      });
+    }
+    if (type === 'symptom') {
+      onSaveSymptom({
+        id: editingSymptomRecord?.id || uid('symptom'),
+        date,
+        intensity: Number(pain) || 1,
+        symptoms,
+        notes: notes.trim(),
+      });
+    }
+    onClose();
+  }
+
+  const sexMode = isSexSheet(type) ? type : null;
+  const typeMeta = type ? getSheetMeta(type) : recordMeta.sex;
+  const sheetShort = sexMode ? '亲密生活' : type === 'period' || type === 'symptom' ? recordMeta[type].short : recordMeta.sex.short;
+  const editingRecord = Boolean(editingSexRecord || editingPeriodRecord || editingSymptomRecord);
+  const symptomOptions = type === 'period' ? ['腹痛', '腰痛', '头痛', '疲劳', '乳房胀痛'] : ['分泌物变化', '腹胀', '疲劳', '失眠', '情绪波动'];
+
+  return (
+    <Modal visible={Boolean(type)} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose} />
+      <View style={styles.sheetPanel}>
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetHeader}>
+          <View>
+            <Text style={styles.dateLabel}>{sheetShort}</Text>
+            <Text style={styles.sheetTitle}>{editingRecord ? `编辑${typeMeta.label}` : `${typeMeta.label}记录`}</Text>
+          </View>
+          <Pressable style={styles.sheetClose} onPress={onClose}>
+            <X color={colors.sub} size={21} strokeWidth={2.6} />
+          </Pressable>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={styles.formGrid}>
+            <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
+            {sexMode && <TimePickerField label="时间" value={time} onChange={setTime} />}
+            {sexMode && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
+            {sexMode === 'partneredSex' && <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />}
+            {sexMode && <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次性生活发生的地点" />}
+            {sexMode === 'partneredSex' && (
+              <OptionSection label="高潮信息">
+                <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
+                <SwitchOption label="伴侣高潮" hint="滑动开关来选择伴侣是否高潮" value={partnerArousal} onChange={setPartnerArousal} Icon={HeartHandshake} />
+                <SwitchOption label="潮吹" hint="滑动开关来选择是否潮吹" value={orgasm} onChange={setOrgasm} Icon={Droplets} />
+                <OptionSection label="射精位置">
+                  <ChipSelect options={['体内', '体外', '口腔', '其他', '未记录']} value={ejaculationPlace} onChange={setEjaculationPlace} />
+                </OptionSection>
+                <SwitchOption label="道具" hint="滑动开关来选择是否使用道具" value={toyUsed} onChange={setToyUsed} Icon={Sparkles} />
+              </OptionSection>
+            )}
+            {sexMode === 'partneredSex' && (
+              <OptionSection label="保护措施">
+                <IconChoiceGrid
+                  options={[
+                    { label: '无保护措施', icon: 'noProtect' },
+                    { label: '安全套', icon: 'condom' },
+                    { label: '药物', icon: 'pill' },
+                  ]}
+                  selected={protectionMethods}
+                  onToggle={toggleProtection}
+                />
+              </OptionSection>
+            )}
+            {sexMode === 'partneredSex' && (
+              <OptionSection label="姿势">
+                <MiniChoiceRail options={['侧躺', '后入', '骑乘', '跪姿', '拥抱', '站立', '俯卧']} selected={positions} onToggle={togglePosition} />
+              </OptionSection>
+            )}
+            {sexMode === 'partneredSex' && (
+              <OptionSection label="谁发起的">
+                <SegmentPicker
+                  value={initiator}
+                  options={[
+                    { value: 'self', label: '你自己' },
+                    { value: 'partner', label: '伴侣' },
+                  ]}
+                  onChange={(value) => setInitiator(value as 'self' | 'partner')}
+                />
+              </OptionSection>
+            )}
+            {sexMode === 'partneredSex' && <SwitchOption label="情趣内衣" hint="滑动开关来选择是否穿戴了情趣内衣" value={lingerie} onChange={setLingerie} Icon={Sparkles} />}
+            {sexMode === 'soloSex' && (
+              <OptionSection label="道具">
+                <IconChoiceGrid
+                  options={[
+                    { label: 'Hand Job', icon: 'hand' },
+                    { label: '飞机杯', icon: 'cup' },
+                    { label: '女用玩具', icon: 'wand' },
+                  ]}
+                  selected={soloTools}
+                  onToggle={toggleSoloTool}
+                />
+              </OptionSection>
+            )}
+            {sexMode === 'soloSex' && <SwitchOption label="观看成人电影" hint="滑动开关来选择是否观看" value={watchedAdultMovie} onChange={setWatchedAdultMovie} Icon={Eye} />}
+            {sexMode === 'soloSex' && <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />}
+            {sexMode && (
+              <OptionSection label="评分">
+                <RatingPicker value={Number(satisfaction) || 0} onChange={(next) => setSatisfaction(String(next))} />
+              </OptionSection>
+            )}
+            {sexMode && (
+              <OptionSection label="心情">
+                <MoodPicker value={mood} onChange={setMood} />
+              </OptionSection>
+            )}
+            {sexMode && <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />}
+            {type === 'period' && <DatePickerField label="结束日期" value={periodEnd || date} onChange={setPeriodEnd} />}
+            {type === 'period' && (
+              <View style={styles.sheetChipGroup}>
+                {[
+                  ['light', '少'],
+                  ['medium', '中'],
+                  ['heavy', '多'],
+                ].map(([value, label]) => (
+                  <Pressable key={value} style={[styles.sheetChip, flow === value && styles.sheetChipActive]} onPress={() => setFlow(value)}>
+                    <Text style={[styles.sheetChipText, flow === value && styles.sheetChipTextActive]}>流量{label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            {!sexMode && (
+              <OptionSection label={type === 'period' ? '痛经程度' : '强度'}>
+                <ScalePicker value={Number(pain) || 0} onChange={(next) => setPain(String(next))} />
+              </OptionSection>
+            )}
+            {!sexMode && (
+              <View style={styles.sheetChipGroup}>
+                {symptomOptions.map((item) => (
+                  <Pressable key={item} style={[styles.sheetChip, symptoms.includes(item) && styles.sheetChipActive]} onPress={() => toggleSymptom(item)}>
+                    <Text style={[styles.sheetChipText, symptoms.includes(item) && styles.sheetChipTextActive]}>{item}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <TextField label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
+            <Pressable style={styles.primaryButton} onPress={save}>
+              <LinearGradient colors={colors.avatarGradient} style={styles.primaryButtonGradient}>
+                <Text style={styles.primaryButtonText}>{editingRecord ? '保存修改' : '保存记录'}</Text>
+              </LinearGradient>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricHint}>{hint}</Text>
+    </View>
+  );
+}
+
+function RecordCard({
+  item,
+  privacy,
+  sexRecord,
+  periodRecord,
+  symptomRecord,
+  onDelete,
+  onEditSex,
+  onEditPeriod,
+  onEditSymptom,
+}: {
+  item: TimelineItem;
+  privacy: boolean;
+  sexRecord?: SexRecord;
+  periodRecord?: PeriodRecord;
+  symptomRecord?: SymptomRecord;
+  onDelete: (type: RecordType, id: string) => void;
+  onEditSex: (record: SexRecord) => void;
+  onEditPeriod: (record: PeriodRecord) => void;
+  onEditSymptom: (record: SymptomRecord) => void;
+}) {
+  const meta = recordMeta[item.type];
+  const sexKind = item.type === 'sex' ? getSexKindMeta(sexRecord) : null;
+  const Icon = sexKind?.Icon || meta.Icon;
+  const iconColors = sexKind?.colors || meta.colors;
+  const canEdit = Boolean(sexRecord || periodRecord || symptomRecord);
+  const title = !privacy && sexKind ? `${sexKind.label} ${sexRecord?.count || 1} 次` : item.title;
+
+  function edit() {
+    if (sexRecord) onEditSex(sexRecord);
+    if (periodRecord) onEditPeriod(periodRecord);
+    if (symptomRecord) onEditSymptom(symptomRecord);
+  }
+
+  return (
+    <Pressable style={styles.recordCard} onPress={() => canEdit && edit()}>
+      <LinearGradient colors={iconColors} style={styles.recordIcon}>
+        <Icon color="#fff" size={22} strokeWidth={2.6} />
+      </LinearGradient>
+      <View style={styles.recordCopy}>
+        <Text style={styles.recordTitle}>{privacy ? '已隐藏' : title}</Text>
+        <Text style={styles.recordMeta}>{privacy ? '隐私模式开启' : item.meta.filter(Boolean).join(' · ')}</Text>
+        {!!item.notes && !privacy && <Text style={styles.recordMeta}>{item.notes}</Text>}
+      </View>
+      {canEdit && (
+        <Pressable style={styles.editButton} onPress={edit}>
+          <Pencil color={colors.primary} size={16} strokeWidth={2.5} />
+        </Pressable>
+      )}
+      <Pressable style={styles.deleteButton} onPress={() => onDelete(item.type, item.id)}>
+        <Trash2 color={colors.danger} size={16} strokeWidth={2.5} />
+      </Pressable>
+    </Pressable>
+  );
+}
+
+function NavItem({ active, label, Icon, onPress }: { active: boolean; label: string; Icon: LucideIcon; onPress: () => void }) {
+  return (
+    <Pressable style={styles.navItem} onPress={onPress}>
+      <View style={[styles.navIconWrap, active && styles.navIconWrapActive]}>
+        <Icon color={active ? colors.primary : colors.sub} size={19} strokeWidth={active ? 2.8 : 2.3} />
+      </View>
+      <Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text>
+      <View style={[styles.navDot, active && styles.navDotActive]} />
+    </Pressable>
+  );
+}
+
+function getSheetMeta(type: SheetType) {
+  if (type === 'partneredSex') return { label: '做爱', Icon: HeartHandshake, colors: [colors.sex, colors.primary] as const };
+  if (type === 'soloSex') return { label: '自慰', Icon: Sparkles, colors: [colors.primary, colors.secondary] as const };
+  return recordMeta[type];
+}
+
+function FabMenuItem({ primary, type, desc, onPress }: { primary?: boolean; type: SheetType; desc: string; onPress: () => void }) {
+  const meta = getSheetMeta(type);
+  const Icon = meta.Icon;
+  return (
+    <Pressable style={[styles.fabMenuItem, primary && styles.fabMenuItemPrimary]} onPress={onPress}>
+      <LinearGradient colors={primary ? meta.colors : [colors.soft, 'rgba(255,255,255,0.68)']} style={styles.fabMenuIcon}>
+        <Icon color={primary ? '#fff' : colors.primary} size={18} strokeWidth={2.6} />
+      </LinearGradient>
+      <View style={styles.fabMenuCopy}>
+        <Text style={styles.fabMenuLabel}>{meta.label}记录</Text>
+        <Text style={styles.fabMenuDesc}>{desc}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendPill}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+function IconLegend({ color, label, Icon }: { color: string; label: string; Icon: LucideIcon }) {
+  return (
+    <View style={styles.legendPill}>
+      <View style={[styles.legendIconBubble, { backgroundColor: color }]}>
+        <Icon color="#fff" size={12} strokeWidth={2.7} />
+      </View>
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+function CalendarDay({
+  date,
+  visibleMonth,
+  state,
+  cycleInfo,
+  selected,
+  onPress,
+}: {
+  date: Date;
+  visibleMonth: Date;
+  state: AppState;
+  cycleInfo: CycleInfo;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const key = toDateKey(date);
+  const markers = getMarkersForDay(date, state, cycleInfo);
+  const sexCount = state.sexRecords
+    .filter((record) => toDateKey(new Date(record.dateTime)) === key)
+    .reduce((sum, record) => sum + Number(record.count || 1), 0);
+  const note = getCalendarNote(sexCount, markers);
+  const isToday = key === toDateKey(new Date());
+  const outside = date.getMonth() !== visibleMonth.getMonth();
+  return (
+    <Pressable style={[styles.calendarDay, outside && styles.calendarDayOutside, isToday && styles.calendarDayToday, selected && styles.calendarDaySelected]} onPress={onPress}>
+      {selected ? (
+        <LinearGradient colors={colors.avatarGradient} style={styles.calendarDayActiveFill}>
+          <Text style={[styles.calendarDayNumber, styles.calendarDayNumberActive]}>{date.getDate()}</Text>
+          <Text style={[styles.calendarDayNote, styles.calendarDayNoteActive]}>{state.settings.privacyMode ? '' : note}</Text>
+        </LinearGradient>
+      ) : (
+        <>
+          <Text style={styles.calendarDayNumber}>{date.getDate()}</Text>
+          <Text style={styles.calendarDayNote}>{state.settings.privacyMode ? '' : note}</Text>
+        </>
+      )}
+      {markers.length > 0 && (
+        <View style={styles.calendarDayMarkerRow}>
+          {markers.slice(0, 3).map((marker) => (
+            <View key={marker} style={[styles.calendarDayMarkerDot, markerStyle(marker), selected && styles.calendarDayMarkerDotActive]} />
+          ))}
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.panel}>
+      <Text style={styles.panelTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function RangeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+  return (
+    <Pressable style={[styles.segmentButton, active && styles.segmentButtonActive]} onPress={onPress}>
+      <Text style={[styles.segmentButtonText, active && styles.segmentButtonTextActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function StatLine({ Icon, label, value }: { Icon: LucideIcon; label: string; value: string }) {
+  return (
+    <View style={styles.statLine}>
+      <View style={styles.statLineIcon}>
+        <Icon color={colors.primary} size={20} strokeWidth={2.6} />
+      </View>
+      <Text style={styles.statLineLabel}>{label}</Text>
+      <Text style={styles.statLineValue}>{value}</Text>
+    </View>
+  );
+}
+
+function SummaryTile({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.summaryTile}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summaryValue}>{value}</Text>
+    </View>
+  );
+}
+
+function NumberSetting({ label, hint, value, onChange }: { label: string; hint: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <View style={styles.settingRow}>
+      <View style={styles.settingCopy}>
+        <Text style={styles.settingTitle}>{label}</Text>
+        <Text style={styles.settingHint}>{hint}</Text>
+      </View>
+      <TextInput
+        style={styles.settingInput}
+        value={String(value)}
+        keyboardType="number-pad"
+        onChangeText={(text) => {
+          const next = Number(text);
+          if (!Number.isNaN(next)) onChange(next);
+        }}
+      />
+    </View>
+  );
+}
+
+function DatePickerField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const selectedKey = value || toDateKey(new Date());
+  const selected = parseDateKey(selectedKey);
+  const relative = relativeDateLabel(selected);
+  const [open, setOpen] = useState(false);
+  const [draftKey, setDraftKey] = useState(selectedKey);
+  const [cursor, setCursor] = useState(new Date(selected.getFullYear(), selected.getMonth(), 1));
+  const days = useMemo(() => buildCalendarDays(cursor), [cursor]);
+
+  useEffect(() => {
+    const nextKey = value || toDateKey(new Date());
+    const next = parseDateKey(nextKey);
+    setDraftKey(nextKey);
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+  }, [value]);
+
+  function openPicker() {
+    setDraftKey(selectedKey);
+    setCursor(new Date(selected.getFullYear(), selected.getMonth(), 1));
+    setOpen(true);
+  }
+
+  function commitDate(nextKey: string) {
+    setDraftKey(nextKey);
+    onChange(nextKey);
+    setOpen(false);
+  }
+
+  function commitToday() {
+    const nextKey = toDateKey(new Date());
+    const next = parseDateKey(nextKey);
+    setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+    commitDate(nextKey);
+  }
+
+  return (
+    <View style={styles.datePickerField}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <Pressable style={styles.datePickerTrigger} onPress={openPicker}>
+        <View style={styles.datePickerTriggerIcon}>
+          <CalendarDays color={colors.primary} size={19} strokeWidth={2.6} />
+        </View>
+        <View style={styles.datePickerTriggerCopy}>
+          <Text style={styles.datePickerTriggerDate}>{longDate(selected)}</Text>
+          <Text style={styles.datePickerTriggerMeta}>{relative.label} · 点击选择日期</Text>
+        </View>
+        <ChevronRight color={colors.sub} size={18} strokeWidth={2.7} />
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={styles.datePickerModalRoot}>
+          <Pressable style={styles.datePickerBackdrop} onPress={() => setOpen(false)} />
+          <View style={styles.datePickerPanel}>
+            <View style={styles.datePickerHeader}>
+              <Pressable style={styles.datePickerNav} onPress={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
+                <ChevronLeft color={colors.primary} size={18} strokeWidth={2.7} />
+              </Pressable>
+              <View style={styles.datePickerTitleBox}>
+                <Text style={styles.datePickerTitle}>{monthLabel(cursor)}</Text>
+                <Text style={styles.datePickerSelected}>{longDate(parseDateKey(draftKey))}</Text>
+              </View>
+              <Pressable style={styles.datePickerNav} onPress={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
+                <ChevronRight color={colors.primary} size={18} strokeWidth={2.7} />
+              </Pressable>
+            </View>
+            <View style={styles.datePickerWeek}>
+              {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
+                <Text style={styles.datePickerWeekday} key={day}>{day}</Text>
+              ))}
+            </View>
+            <View style={styles.datePickerGrid}>
+              {days.map((date) => {
+                const key = toDateKey(date);
+                const active = key === draftKey;
+                const outside = date.getMonth() !== cursor.getMonth();
+                const isToday = key === toDateKey(new Date());
+                return (
+                  <Pressable
+                    key={key}
+                    style={[styles.datePickerDay, outside && styles.datePickerDayMuted, isToday && styles.datePickerDayToday, active && styles.datePickerDayActive]}
+                    onPress={() => commitDate(key)}
+                  >
+                    <Text style={[styles.datePickerDayText, active && styles.datePickerDayTextActive]}>{date.getDate()}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.datePickerActions}>
+              <Pressable style={styles.datePickerGhostButton} onPress={() => setOpen(false)}>
+                <Text style={styles.datePickerGhostText}>取消</Text>
+              </Pressable>
+              <Pressable style={styles.datePickerTodayButton} onPress={commitToday}>
+                <Text style={styles.datePickerTodayText}>回到今天</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function OptionSection({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View style={styles.optionSection}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={styles.optionCard}>{children}</View>
+    </View>
+  );
+}
+
+function SwitchOption({ label, hint, value, onChange, Icon }: { label: string; hint: string; value: boolean; onChange: (value: boolean) => void; Icon: LucideIcon }) {
+  return (
+    <View style={styles.switchOption}>
+      <View style={styles.switchCopy}>
+        <Text style={styles.switchLabel}>{label}</Text>
+        <Text style={styles.switchHint}>{hint}</Text>
+      </View>
+      <Pressable style={[styles.prettySwitch, value && styles.prettySwitchActive]} onPress={() => onChange(!value)}>
+        <View style={[styles.prettySwitchThumb, value && styles.prettySwitchThumbActive]}>
+          <Icon color={value ? colors.primary : colors.sub} size={15} strokeWidth={2.6} />
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+function SelectOption({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.selectOption} onPress={onPress}>
+      <View>
+        <Text style={styles.switchLabel}>{label}</Text>
+        <Text style={styles.switchHint}>{value}</Text>
+      </View>
+      <ChevronRight color={colors.sub} size={18} strokeWidth={2.6} />
+    </Pressable>
+  );
+}
+
+
+function IconChoiceGrid({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: Array<{ label: string; icon: IconName }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <View style={styles.iconChoiceGrid}>
+      {options.map((option) => {
+        const active = selected.includes(option.label);
+        return (
+          <Pressable key={option.label} style={styles.iconChoiceItem} onPress={() => onToggle(option.label)}>
+            <View style={[styles.aphroditeIconBubble, active && styles.aphroditeIconBubbleActive]}>
+              <CartoonIcon name={option.icon} active={active} size={30} />
+            </View>
+            <Text style={[styles.iconChoiceLabel, active && styles.iconChoiceLabelActive]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const positionIconMap: Record<string, IconName> = {
+  侧躺: 'sideLying',
+  后入: 'rear',
+  骑乘: 'cowgirl',
+  跪姿: 'kneel',
+  拥抱: 'embrace',
+  站立: 'standing',
+  俯卧: 'prone',
+};
+
+function MiniChoiceRail({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (value: string) => void }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.miniChoiceRail}>
+      {options.map((option) => {
+        const active = selected.includes(option);
+        return (
+          <Pressable key={option} style={[styles.miniChoice, active && styles.miniChoiceActive]} onPress={() => onToggle(option)}>
+            <CartoonIcon name={positionIconMap[option] || 'embrace'} active={active} size={30} />
+            <Text style={[styles.miniChoiceText, active && styles.miniChoiceTextActive]}>{option}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+function SegmentPicker({ value, options, onChange }: { value: string; options: Array<{ value: string; label: string }>; onChange: (value: string) => void }) {
+  return (
+    <View style={styles.sheetSegment}>
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <Pressable key={option.value} style={[styles.sheetSegmentButton, active && styles.sheetSegmentButtonActive]} onPress={() => onChange(option.value)}>
+            <Text style={[styles.sheetSegmentText, active && styles.sheetSegmentTextActive]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function RatingPicker({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <View style={styles.ratingPicker}>
+      {[1, 3, 5].map((score) => (
+        <Pressable key={score} style={[styles.ratingButton, value === score && styles.ratingButtonActive]} onPress={() => onChange(score)}>
+          <Text style={styles.ratingStars}>{'★'.repeat(Math.ceil(score / 2))}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+function MoodPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const options: Array<{ label: string; name: IconName; color: string }> = [
+    { label: '难受', name: 'moodBad', color: '#ffb9bd' },
+    { label: '一般', name: 'moodMeh', color: '#ffeaa7' },
+    { label: '平静', name: 'moodCalm', color: '#a9c7fb' },
+    { label: '开心', name: 'moodHappy', color: '#8fe0dd' },
+    { label: '愉悦', name: 'moodJoy', color: '#d0b6ff' },
+  ];
+  return (
+    <View style={styles.moodPicker}>
+      {options.map((option) => {
+        const active = value === option.label;
+        return (
+          <Pressable key={option.label} style={styles.moodButton} onPress={() => onChange(option.label)}>
+            <View style={[styles.moodFace, active && styles.moodFaceActive]}>
+              <CartoonIcon name={option.name} color={option.color} size={46} />
+            </View>
+            <Text style={[styles.moodLabel, active && styles.moodLabelActive]}>{option.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+type IconName =
+  | 'hand'
+  | 'cup'
+  | 'wand'
+  | 'noProtect'
+  | 'condom'
+  | 'pill'
+  | 'sideLying'
+  | 'rear'
+  | 'cowgirl'
+  | 'kneel'
+  | 'embrace'
+  | 'standing'
+  | 'prone'
+  | 'moodBad'
+  | 'moodMeh'
+  | 'moodCalm'
+  | 'moodHappy'
+  | 'moodJoy';
+
+// 抽象小人：圆头 + 椭圆身，dir 控制横躺/竖立
+function Figure({ x, y, dir, fill }: { x: number; y: number; dir: 'h' | 'v'; fill: string }) {
+  if (dir === 'h') {
+    return (
+      <G>
+        <Circle cx={x - 5.5} cy={y} r={3} fill={fill} />
+        <Ellipse cx={x + 1.5} cy={y} rx={5.5} ry={3} fill={fill} />
+      </G>
+    );
+  }
+  return (
+    <G>
+      <Circle cx={x} cy={y - 5.5} r={3} fill={fill} />
+      <Ellipse cx={x} cy={y + 1.5} rx={3} ry={5.5} fill={fill} />
+    </G>
+  );
+}
+
+function CartoonIcon({ name, size = 27, active = false, color }: { name: IconName; size?: number; active?: boolean; color?: string }) {
+  const main = active ? colors.primary : '#7d70b0';
+  const soft = active ? colors.primaryLight : '#cdc4e8';
+  const ink = '#4a4368';
+
+  const svg = (children: ReactNode) => (
+    <Svg width={size} height={size} viewBox="0 0 32 32">
+      {children}
+    </Svg>
+  );
+
+  switch (name) {
+    case 'hand':
+      return svg(
+        <>
+          <Rect x={9} y={14} width={14} height={12} rx={5} fill={main} />
+          <Rect x={10} y={7} width={2.6} height={10} rx={1.3} fill={soft} />
+          <Rect x={13.3} y={5.5} width={2.6} height={11.5} rx={1.3} fill={soft} />
+          <Rect x={16.6} y={6} width={2.6} height={11} rx={1.3} fill={soft} />
+          <Rect x={19.8} y={8} width={2.6} height={9} rx={1.3} fill={soft} />
+          <Rect x={5.4} y={15.6} width={6} height={2.8} rx={1.4} fill={soft} transform="rotate(42 8 17)" />
+        </>
+      );
+    case 'cup':
+      return svg(
+        <>
+          <Rect x={10} y={8} width={12} height={18} rx={3} fill={soft} />
+          <Ellipse cx={16} cy={8} rx={6} ry={2.6} fill={main} />
+          <Ellipse cx={16} cy={8} rx={3.2} ry={1.3} fill={soft} />
+          <Rect x={12.6} y={12} width={2.2} height={9} rx={1.1} fill="rgba(255,255,255,0.55)" />
+        </>
+      );
+    case 'wand':
+      return svg(
+        <>
+          <Rect x={13.8} y={12} width={4.4} height={15} rx={2.2} fill={main} />
+          <Circle cx={16} cy={9} r={6} fill={soft} />
+          <Circle cx={16} cy={9} r={2.6} fill={main} />
+        </>
+      );
+    case 'noProtect':
+      return svg(
+        <>
+          <Path d="M16 4 L26 8 V15 C26 21 21 26 16 28 C11 26 6 21 6 15 V8 Z" fill={soft} />
+          <Line x1={9} y1={9} x2={23} y2={24} stroke={main} strokeWidth={3.2} strokeLinecap="round" />
+        </>
+      );
+    case 'condom':
+      return svg(
+        <>
+          <Rect x={6} y={8} width={20} height={16} rx={3} fill={soft} />
+          <Circle cx={16} cy={16} r={5.4} fill={main} />
+          <Circle cx={16} cy={16} r={2.4} fill={soft} />
+        </>
+      );
+    case 'pill':
+      return svg(
+        <>
+          <Rect x={6} y={6} width={20} height={20} rx={4} fill={soft} />
+          {[11, 21].map((cx) =>
+            [11, 16, 21].map((cy) => <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={2.4} fill={main} />)
+          )}
+        </>
+      );
+    case 'sideLying':
+      return svg(
+        <>
+          <Figure x={18} y={13} dir="h" fill={soft} />
+          <Figure x={15} y={19} dir="h" fill={main} />
+        </>
+      );
+    case 'prone':
+      return svg(
+        <>
+          <Figure x={16} y={13} dir="h" fill={soft} />
+          <Figure x={16} y={20} dir="h" fill={main} />
+        </>
+      );
+    case 'rear':
+      return svg(
+        <>
+          <Figure x={21} y={16} dir="h" fill={soft} />
+          <Figure x={13} y={16} dir="h" fill={main} />
+        </>
+      );
+    case 'cowgirl':
+      return svg(
+        <>
+          <Figure x={16} y={22} dir="h" fill={soft} />
+          <Figure x={16} y={11} dir="v" fill={main} />
+        </>
+      );
+    case 'kneel':
+      return svg(
+        <>
+          <Figure x={20} y={17} dir="v" fill={soft} />
+          <Figure x={12} y={17} dir="v" fill={main} />
+        </>
+      );
+    case 'embrace':
+      return svg(
+        <>
+          <Figure x={19} y={16} dir="v" fill={soft} />
+          <Figure x={13} y={16} dir="v" fill={main} />
+        </>
+      );
+    case 'standing':
+      return svg(
+        <>
+          <Figure x={21} y={16} dir="v" fill={soft} />
+          <Figure x={11} y={16} dir="v" fill={main} />
+        </>
+      );
+    default: {
+      // 心情脸
+      const face = color || soft;
+      const eye = (cx: number) => <Circle cx={cx} cy={14} r={1.6} fill={ink} />;
+      let features: ReactNode = null;
+      if (name === 'moodBad') {
+        features = (
+          <>
+            <Line x1={9.6} y1={13} x2={13} y2={14.4} stroke={ink} strokeWidth={1.6} strokeLinecap="round" />
+            <Line x1={22.4} y1={13} x2={19} y2={14.4} stroke={ink} strokeWidth={1.6} strokeLinecap="round" />
+            <Path d="M11 22 Q16 18 21 22" stroke={ink} strokeWidth={1.8} fill="none" strokeLinecap="round" />
+          </>
+        );
+      } else if (name === 'moodMeh') {
+        features = (
+          <>
+            {eye(11.5)}
+            {eye(20.5)}
+            <Line x1={11.5} y1={21} x2={20.5} y2={21} stroke={ink} strokeWidth={1.8} strokeLinecap="round" />
+          </>
+        );
+      } else if (name === 'moodCalm') {
+        features = (
+          <>
+            {eye(11.5)}
+            {eye(20.5)}
+            <Path d="M12 20 Q16 22.5 20 20" stroke={ink} strokeWidth={1.8} fill="none" strokeLinecap="round" />
+          </>
+        );
+      } else if (name === 'moodHappy') {
+        features = (
+          <>
+            {eye(11.5)}
+            {eye(20.5)}
+            <Path d="M11 19.5 Q16 25 21 19.5" stroke={ink} strokeWidth={1.9} fill="none" strokeLinecap="round" />
+          </>
+        );
+      } else {
+        // moodJoy
+        features = (
+          <>
+            <Path d="M9.5 14.5 Q11.5 12 13.5 14.5" stroke={ink} strokeWidth={1.7} fill="none" strokeLinecap="round" />
+            <Path d="M18.5 14.5 Q20.5 12 22.5 14.5" stroke={ink} strokeWidth={1.7} fill="none" strokeLinecap="round" />
+            <Path d="M10 18.5 Q16 27 22 18.5" stroke={ink} strokeWidth={2} fill="none" strokeLinecap="round" />
+          </>
+        );
+      }
+      return svg(
+        <>
+          <Circle cx={16} cy={16} r={12} fill={face} />
+          {features}
+        </>
+      );
+    }
+  }
+}
+
+function TimePickerField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const safe = /^\d{1,2}:\d{2}$/.test(value) ? value : '12:00';
+  const [h, m] = safe.split(':');
+  const [draftHour, setDraftHour] = useState(h.padStart(2, '0'));
+  const [draftMinute, setDraftMinute] = useState(m);
+  const hourRef = useRef<ScrollView>(null);
+  const minuteRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const ok = /^\d{1,2}:\d{2}$/.test(value) ? value : '12:00';
+    const [hh, mm] = ok.split(':');
+    setDraftHour(hh.padStart(2, '0'));
+    setDraftMinute(mm);
+  }, [value]);
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
+  const minutes = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
+  useEffect(() => {
+    if (!open) return;
+    const rowHeight = 44; // timeOption height 40 + marginBottom 4
+    const centerOffset = 64; // keep selected value near vertical center of the 172px column
+    const hIndex = hours.indexOf(draftHour);
+    const mIndex = minutes.indexOf(draftMinute);
+    const timer = setTimeout(() => {
+      hourRef.current?.scrollTo({ y: Math.max(0, hIndex * rowHeight - centerOffset), animated: false });
+      minuteRef.current?.scrollTo({ y: Math.max(0, mIndex * rowHeight - centerOffset), animated: false });
+    }, 40);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function commit() {
+    onChange(`${draftHour}:${draftMinute}`);
+    setOpen(false);
+  }
+  function setNow() {
+    const now = new Date();
+    onChange(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+    setOpen(false);
+  }
+
+  return (
+    <View style={styles.datePickerField}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <Pressable style={styles.datePickerTrigger} onPress={() => setOpen(true)}>
+        <View style={styles.datePickerTriggerIcon}>
+          <Clock color={colors.primary} size={19} strokeWidth={2.6} />
+        </View>
+        <View style={styles.datePickerTriggerCopy}>
+          <Text style={styles.datePickerTriggerDate}>{safe}</Text>
+          <Text style={styles.datePickerTriggerMeta}>点击选择时间</Text>
+        </View>
+        <ChevronRight color={colors.sub} size={18} strokeWidth={2.7} />
+      </Pressable>
+
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <View style={styles.datePickerModalRoot}>
+          <Pressable style={styles.datePickerBackdrop} onPress={() => setOpen(false)} />
+          <View style={styles.datePickerPanel}>
+            <View style={styles.datePickerTitleBox}>
+              <Text style={styles.datePickerTitle}>{draftHour}:{draftMinute}</Text>
+            </View>
+            <View style={styles.timePickerColumns}>
+              <View style={styles.timePickerColumn}>
+                <Text style={styles.timePickerColumnLabel}>时</Text>
+                <ScrollView ref={hourRef} style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                  {hours.map((hh) => (
+                    <Pressable key={hh} style={[styles.timeOption, draftHour === hh && styles.timeOptionActive]} onPress={() => setDraftHour(hh)}>
+                      <Text style={[styles.timeOptionText, draftHour === hh && styles.timeOptionTextActive]}>{hh}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.timePickerColumn}>
+                <Text style={styles.timePickerColumnLabel}>分</Text>
+                <ScrollView ref={minuteRef} style={styles.timePickerScroll} showsVerticalScrollIndicator={false}>
+                  {minutes.map((mm) => (
+                    <Pressable key={mm} style={[styles.timeOption, draftMinute === mm && styles.timeOptionActive]} onPress={() => setDraftMinute(mm)}>
+                      <Text style={[styles.timeOptionText, draftMinute === mm && styles.timeOptionTextActive]}>{mm}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+            <View style={styles.datePickerActions}>
+              <Pressable style={styles.datePickerGhostButton} onPress={setNow}>
+                <Text style={styles.datePickerGhostText}>现在</Text>
+              </Pressable>
+              <Pressable style={styles.datePickerTodayButton} onPress={commit}>
+                <Text style={styles.datePickerTodayText}>完成</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function DurationField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const current = Number(value) || 0;
+  const presets = [10, 15, 20, 30, 45, 60, 90];
+  const [showPicker, setShowPicker] = useState(false);
+  const [showTimer, setShowTimer] = useState(false);
+  function setValue(next: number) {
+    const clamped = Math.max(0, Math.min(600, next));
+    onChange(clamped > 0 ? String(clamped) : '');
+  }
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <View style={styles.durationStepper}>
+        <Pressable style={styles.stepperButton} onPress={() => setValue(current - 1)}>
+          <Text style={styles.stepperButtonText}>−</Text>
+        </Pressable>
+        <Pressable style={styles.stepperValueBox} onPress={() => setShowPicker(true)}>
+          <Text style={styles.stepperValue}>{current > 0 ? current : '未设置'}</Text>
+          <Text style={styles.stepperUnit}>{current > 0 ? '分钟 · 点击调整' : '点击选择'}</Text>
+        </Pressable>
+        <Pressable style={styles.stepperButton} onPress={() => setValue(current + 1)}>
+          <Text style={styles.stepperButtonText}>＋</Text>
+        </Pressable>
+      </View>
+      <View style={styles.sheetChipGroup}>
+        {presets.map((preset) => (
+          <Pressable key={preset} style={[styles.sheetChip, current === preset && styles.sheetChipActive]} onPress={() => setValue(preset)}>
+            <Text style={[styles.sheetChipText, current === preset && styles.sheetChipTextActive]}>{preset}分</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Pressable style={styles.timerLaunchButton} onPress={() => setShowTimer(true)}>
+        <Clock color={colors.primary} size={17} strokeWidth={2.6} />
+        <Text style={styles.timerLaunchText}>用计时器记录</Text>
+      </Pressable>
+
+      <DurationPickerModal
+        visible={showPicker}
+        value={current}
+        onCancel={() => setShowPicker(false)}
+        onConfirm={(minutes) => {
+          setValue(minutes);
+          setShowPicker(false);
+        }}
+      />
+      <TimerModal
+        visible={showTimer}
+        onClose={() => setShowTimer(false)}
+        onDone={(minutes) => {
+          setValue(minutes);
+          setShowTimer(false);
+        }}
+      />
+    </View>
+  );
+}
+
+function DurationPickerModal({ visible, value, onCancel, onConfirm }: { visible: boolean; value: number; onCancel: () => void; onConfirm: (minutes: number) => void }) {
+  const minutes = Array.from({ length: 181 }, (_, i) => i);
+  const [draft, setDraft] = useState(value);
+  const [text, setText] = useState(value ? String(value) : '');
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    setDraft(value);
+    setText(value ? String(value) : '');
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, value * 44 - 64), animated: false });
+    }, 40);
+    return () => clearTimeout(timer);
+  }, [visible, value]);
+
+  function pick(minute: number) {
+    setDraft(minute);
+    setText(String(minute));
+  }
+  function onChangeText(next: string) {
+    const clean = next.replace(/[^0-9]/g, '');
+    setText(clean);
+    if (clean) setDraft(Math.min(600, Number(clean)));
+    else setDraft(0);
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.datePickerModalRoot}>
+        <Pressable style={styles.datePickerBackdrop} onPress={onCancel} />
+        <View style={styles.datePickerPanel}>
+          <View style={styles.datePickerTitleBox}>
+            <Text style={styles.datePickerTitle}>{draft > 0 ? `${draft} 分钟` : '未设置'}</Text>
+          </View>
+          <View style={styles.durationManualRow}>
+            <Text style={styles.durationManualLabel}>手动输入</Text>
+            <TextInput
+              style={styles.durationManualInput}
+              value={text}
+              onChangeText={onChangeText}
+              keyboardType="number-pad"
+              placeholder="分钟"
+              placeholderTextColor="#9aa2b7"
+            />
+          </View>
+          <ScrollView ref={scrollRef} style={styles.durationScroll} showsVerticalScrollIndicator={false}>
+            {minutes.map((minute) => (
+              <Pressable key={minute} style={[styles.timeOption, draft === minute && styles.timeOptionActive]} onPress={() => pick(minute)}>
+                <Text style={[styles.timeOptionText, draft === minute && styles.timeOptionTextActive]}>{minute} 分</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <View style={styles.datePickerActions}>
+            <Pressable style={styles.datePickerGhostButton} onPress={onCancel}>
+              <Text style={styles.datePickerGhostText}>取消</Text>
+            </Pressable>
+            <Pressable style={styles.datePickerTodayButton} onPress={() => onConfirm(draft)}>
+              <Text style={styles.datePickerTodayText}>完成</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function TimerModal({ visible, onClose, onDone }: { visible: boolean; onClose: () => void; onDone: (minutes: number) => void }) {
+  const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(false);
+  const startedAt = useRef<number | null>(null);
+  const accumulated = useRef(0);
+  const interval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function clearTick() {
+    if (interval.current) {
+      clearInterval(interval.current);
+      interval.current = null;
+    }
+  }
+  function currentSeconds() {
+    return accumulated.current + (startedAt.current ? Math.floor((Date.now() - startedAt.current) / 1000) : 0);
+  }
+  function start() {
+    startedAt.current = Date.now();
+    setRunning(true);
+    clearTick();
+    interval.current = setInterval(() => setElapsed(currentSeconds()), 250);
+  }
+  function pause() {
+    accumulated.current = currentSeconds();
+    startedAt.current = null;
+    setRunning(false);
+    clearTick();
+    setElapsed(accumulated.current);
+  }
+  function reset() {
+    clearTick();
+    startedAt.current = null;
+    accumulated.current = 0;
+    setRunning(false);
+    setElapsed(0);
+  }
+  function finish() {
+    const total = currentSeconds();
+    clearTick();
+    const minutes = total > 0 ? Math.max(1, Math.round(total / 60)) : 0;
+    if (minutes > 0) onDone(minutes);
+    else onClose();
+  }
+
+  useEffect(() => {
+    if (!visible) {
+      clearTick();
+      startedAt.current = null;
+      accumulated.current = 0;
+      setRunning(false);
+      setElapsed(0);
+    }
+    return () => clearTick();
+  }, [visible]);
+
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const ss = String(elapsed % 60).padStart(2, '0');
+
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={styles.timerRoot}>
+        <LinearGradient colors={colors.appGradient} style={StyleSheet.absoluteFill} />
+        <Pressable style={styles.timerClose} onPress={onClose}>
+          <X color={colors.sub} size={24} strokeWidth={2.6} />
+        </Pressable>
+        <Text style={styles.timerHeading}>持续时间计时</Text>
+        <LinearGradient colors={colors.bubbleGradient} style={styles.timerRing}>
+          <Text style={styles.timerDisplay}>
+            {mm}:{ss}
+          </Text>
+          <Text style={styles.timerSub}>{running ? '计时中…' : elapsed > 0 ? '已暂停' : '未开始'}</Text>
+        </LinearGradient>
+        <View style={styles.timerControls}>
+          <Pressable style={styles.timerGhostButton} onPress={reset}>
+            <Text style={styles.timerGhostText}>重置</Text>
+          </Pressable>
+          <Pressable style={styles.timerPrimaryButton} onPress={running ? pause : start}>
+            <LinearGradient colors={colors.avatarGradient} style={styles.timerPrimaryGradient}>
+              <Text style={styles.timerPrimaryText}>{running ? '暂停' : elapsed > 0 ? '继续' : '开始'}</Text>
+            </LinearGradient>
+          </Pressable>
+          <Pressable style={styles.timerGhostButton} onPress={finish}>
+            <Text style={styles.timerGhostText}>完成</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.timerHint}>完成后将按分钟自动填入持续时间</Text>
+      </View>
+    </Modal>
+  );
+}
+
+function ScalePicker({ value, onChange, max = 5 }: { value: number; onChange: (value: number) => void; max?: number }) {
+  return (
+    <View style={styles.scaleRow}>
+      {Array.from({ length: max + 1 }, (_, i) => i).map((score) => {
+        const active = value === score;
+        return (
+          <Pressable key={score} style={[styles.scaleButton, active && styles.scaleButtonActive]} onPress={() => onChange(score)}>
+            <Text style={[styles.scaleText, active && styles.scaleTextActive]}>{score}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function ChipSelect({ options, value, onChange }: { options: string[]; value: string; onChange: (value: string) => void }) {
+  return (
+    <View style={styles.sheetChipGroup}>
+      {options.map((option) => {
+        const active = value === option;
+        return (
+          <Pressable key={option} style={[styles.sheetChip, active && styles.sheetChipActive]} onPress={() => onChange(active ? '' : option)}>
+            <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  multiline,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  keyboardType?: 'default' | 'number-pad';
+  multiline?: boolean;
+}) {
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={[styles.input, multiline && styles.textarea]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9aa2b7"
+        keyboardType={keyboardType}
+        multiline={multiline}
+      />
+    </View>
+  );
+}
+
+function getCycleInfo(state: AppState): CycleInfo {
+  const starts = state.periodRecords
+    .map((record) => record.startDate)
+    .filter(Boolean)
+    .sort();
+  const latestStart = starts.at(-1);
+  if (!latestStart) return null;
+  const start = parseDateKey(latestStart);
+  const current = startOfDay(new Date());
+  const day = daysBetween(start, current) + 1;
+
+  // 用最近若干次经期开始的间隔做滚动平均，替代固定的设置值
+  const gaps: number[] = [];
+  for (let index = 1; index < starts.length; index += 1) {
+    gaps.push(daysBetween(parseDateKey(starts[index - 1]), parseDateKey(starts[index])));
+  }
+  const recentGaps = gaps.slice(-6).filter((gap) => gap >= 15 && gap <= 60); // 过滤掉明显异常的间隔
+  const hasHistory = recentGaps.length >= 2;
+  const cycleLength = hasHistory
+    ? Math.round(recentGaps.reduce((sum, gap) => sum + gap, 0) / recentGaps.length)
+    : state.settings.cycleDays;
+  const variability = hasHistory
+    ? Math.min(5, Math.max(1, Math.round((Math.max(...recentGaps) - Math.min(...recentGaps)) / 2)))
+    : 0;
+  const confidence: 'high' | 'low' = hasHistory ? 'high' : 'low';
+
+  const normalizedDay = ((day - 1) % cycleLength + cycleLength) % cycleLength + 1;
+  const nextPeriod = addDays(start, cycleLength * Math.max(1, Math.ceil(day / cycleLength)));
+  const ovulation = addDays(nextPeriod, -14);
+  const fertileStart = addDays(ovulation, -5);
+  const fertileEnd = addDays(ovulation, 1);
+  const nextPeriodEarliest = addDays(nextPeriod, -variability);
+  const nextPeriodLatest = addDays(nextPeriod, variability);
+  return {
+    start,
+    day,
+    normalizedDay,
+    nextPeriod,
+    ovulation,
+    fertileStart,
+    fertileEnd,
+    cycleLength,
+    variability,
+    confidence,
+    nextPeriodEarliest,
+    nextPeriodLatest,
+  };
+}
+
+function cyclePredictionHint(info: NonNullable<CycleInfo>) {
+  if (info.confidence === 'low') {
+    return `参考预测：${shortDate(info.nextPeriod)} 前后开始。再记录几次经期后预测会更准。`;
+  }
+  const band = info.variability > 0 ? `（±${info.variability} 天）` : '';
+  return `预测下次开始：${shortDate(info.nextPeriod)}${band}，排卵日前后：${shortDate(info.ovulation)}。`;
+}
+
+function getCycleStatus(state: AppState, info: CycleInfo) {
+  if (!info) {
+    return {
+      pill: '未开始',
+      title: '还没有周期记录',
+      hint: '添加一次月经开始日期后，会显示下次经期和易孕期预测。',
+    };
+  }
+  const current = startOfDay(new Date());
+  const isPeriod = info.normalizedDay <= state.settings.periodDays;
+  const isFertile = current >= startOfDay(info.fertileStart) && current <= startOfDay(info.fertileEnd);
+  const daysToNext = Math.max(0, daysBetween(current, info.nextPeriod));
+  const hint = cyclePredictionHint(info);
+  if (isPeriod) {
+    return {
+      pill: '经期',
+      title: `经期第 ${info.normalizedDay} 天`,
+      hint,
+    };
+  }
+  if (isFertile) {
+    return {
+      pill: '易孕期',
+      title: '易孕窗口',
+      hint,
+    };
+  }
+  return {
+    pill: '周期预测',
+    title: `距下次月经 ${daysToNext} 天`,
+    hint,
+  };
+}
+
+function buildStats(state: AppState) {
+  const now = new Date();
+  const monthSexCount = state.sexRecords
+    .filter((record) => {
+      const date = new Date(record.dateTime);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    })
+    .reduce((sum, record) => sum + Number(record.count || 1), 0);
+
+  const sexDates = state.sexRecords.map((record) => startOfDay(new Date(record.dateTime))).sort((a, b) => a.getTime() - b.getTime());
+  let averageGap: string | number = '--';
+  if (sexDates.length >= 2) {
+    let total = 0;
+    for (let index = 1; index < sexDates.length; index += 1) total += daysBetween(sexDates[index - 1], sexDates[index]);
+    averageGap = Math.round(total / (sexDates.length - 1));
+  }
+
+  const starts = state.periodRecords.map((record) => record.startDate).filter(Boolean).sort().map(parseDateKey);
+  let averageCycle: string | number = '--';
+  if (starts.length >= 2) {
+    let total = 0;
+    for (let index = 1; index < starts.length; index += 1) total += daysBetween(starts[index - 1], starts[index]);
+    averageCycle = Math.round(total / (starts.length - 1));
+  }
+
+  const durations = state.periodRecords
+    .filter((record) => record.startDate && record.endDate)
+    .map((record) => daysBetween(parseDateKey(record.startDate), parseDateKey(record.endDate || record.startDate)) + 1);
+  const averagePeriod = durations.length ? Math.round(durations.reduce((sum, days) => sum + days, 0) / durations.length) : state.settings.periodDays;
+
+  return { monthSexCount, averageGap, averageCycle, averagePeriod };
+}
+
+function buildTimeline(state: AppState): TimelineItem[] {
+  return [
+    ...state.sexRecords.map((record): TimelineItem => ({
+      id: record.id,
+      type: 'sex',
+      date: new Date(record.dateTime),
+      title: `性生活 ${record.count || 1} 次`,
+      meta: [
+        dateTimeLabel(record.dateTime),
+        record.sexTypes?.length ? record.sexTypes.join('、') : record.sexType || '',
+        record.partnerAlias ? `伴侣 ${record.partnerAlias}` : '',
+        record.durationMinutes ? `${record.durationMinutes} 分钟` : '',
+        record.protectionMethods?.length ? `保护 ${record.protectionMethods.join('、')}` : record.protection ? `保护 ${record.protection}` : '',
+        record.place ? `地点 ${record.place}` : '',
+        record.mood ? `情绪 ${record.mood}` : '',
+        record.satisfaction ? `满意度 ${record.satisfaction}/5` : '',
+      ],
+      notes: record.notes,
+    })),
+    ...state.periodRecords.map((record): TimelineItem => ({
+      id: record.id,
+      type: 'period',
+      date: parseDateKey(record.startDate),
+      title: `月经开始${record.endDate ? ` - ${record.endDate}` : ''}`,
+      meta: [record.flow ? `流量 ${record.flow === 'medium' ? '中' : record.flow}` : '', `痛经 ${record.painLevel || 0}/5`, ...record.symptoms],
+      notes: record.notes,
+    })),
+    ...state.symptomRecords.map((record): TimelineItem => ({
+      id: record.id,
+      type: 'symptom',
+      date: parseDateKey(record.date),
+      title: '症状记录',
+      meta: [`强度 ${record.intensity}/5`, ...record.symptoms],
+      notes: record.notes,
+    })),
+  ].sort((left, right) => right.date.getTime() - left.date.getTime());
+}
+
+function buildCalendarDays(visibleMonth: Date) {
+  const first = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const offset = (first.getDay() + 6) % 7;
+  const gridStart = addDays(first, -offset);
+  return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+}
+
+function getMarkersForDay(date: Date, state: AppState, info: CycleInfo) {
+  const key = toDateKey(date);
+  const markers: string[] = [];
+  const sexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === key);
+  if (sexRecords.some((record) => !isSoloSexRecord(record))) markers.push('partnered-sex');
+  if (sexRecords.some((record) => isSoloSexRecord(record))) markers.push('solo-sex');
+
+  const realPeriod = state.periodRecords.some((record) => {
+    const start = parseDateKey(record.startDate);
+    const end = record.endDate ? parseDateKey(record.endDate) : addDays(start, state.settings.periodDays - 1);
+    return startOfDay(date) >= startOfDay(start) && startOfDay(date) <= startOfDay(end);
+  });
+  if (realPeriod) markers.push('period');
+
+  if (info) {
+    const day = startOfDay(date);
+    const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+    const pmsStart = addDays(info.nextPeriod, -5);
+    const pmsEnd = addDays(info.nextPeriod, -1);
+    if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) markers.push('predicted');
+    if (day >= startOfDay(pmsStart) && day <= startOfDay(pmsEnd)) markers.push('pms');
+    if (toDateKey(day) === toDateKey(info.ovulation)) markers.push('ovulation');
+    if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) markers.push('fertile');
+  }
+  return markers;
+}
+
+function findPeriodForDate(state: AppState, date: Date) {
+  return state.periodRecords.find((record) => {
+    const start = parseDateKey(record.startDate);
+    const end = record.endDate ? parseDateKey(record.endDate) : addDays(start, state.settings.periodDays - 1);
+    return startOfDay(date) >= startOfDay(start) && startOfDay(date) <= startOfDay(end);
+  });
+}
+
+function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
+  title: string;
+  detail: string;
+  Icon: LucideIcon;
+  colors: readonly [string, string];
+} {
+  const day = startOfDay(date);
+  const realPeriod = findPeriodForDate(state, date);
+  if (realPeriod) {
+    const periodDay = daysBetween(parseDateKey(realPeriod.startDate), day) + 1;
+    const end = realPeriod.endDate ? parseDateKey(realPeriod.endDate) : addDays(parseDateKey(realPeriod.startDate), state.settings.periodDays - 1);
+    return {
+      title: `月经期第 ${periodDay} 天`,
+      detail: `本次经期预计到 ${shortDate(end)}。可在这里标记开始或结束来校准预测。`,
+      Icon: Droplets,
+      colors: [colors.period, colors.periodLight],
+    };
+  }
+
+  if (!info) {
+    return {
+      title: '暂无周期状态',
+      detail: '标记一次经期开始后，会显示卵泡期、排卵期、黄体期和下次经期预测。',
+      Icon: CalendarDays,
+      colors: [colors.primary, colors.primaryLight],
+    };
+  }
+
+  const cycleDay = ((daysBetween(info.start, day) % info.cycleLength) + info.cycleLength) % info.cycleLength + 1;
+  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  const pmsStart = addDays(info.nextPeriod, -5);
+  const pmsEnd = addDays(info.nextPeriod, -1);
+
+  if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) {
+    const periodDay = daysBetween(info.nextPeriod, day) + 1;
+    return {
+      title: `预计月经期第 ${periodDay} 天`,
+      detail: `这是根据 ${info.cycleLength} 天周期推算的经期。若实际开始，请标记经期开始。`,
+      Icon: Droplets,
+      colors: [colors.gold, colors.secondary],
+    };
+  }
+
+  if (toDateKey(day) === toDateKey(info.ovulation)) {
+    return {
+      title: '预计排卵日',
+      detail: `当前处于易孕窗口内，周期第 ${cycleDay} 天。`,
+      Icon: Activity,
+      colors: colors.avatarGradient,
+    };
+  }
+
+  if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) {
+    const fertileDay = daysBetween(info.fertileStart, day) + 1;
+    return {
+      title: `预计排卵期第 ${fertileDay} 天`,
+      detail: `排卵日预计在 ${shortDate(info.ovulation)}，当前处于易孕窗口。`,
+      Icon: Activity,
+      colors: [colors.green, colors.primaryLight],
+    };
+  }
+
+  if (day >= startOfDay(pmsStart) && day <= startOfDay(pmsEnd)) {
+    const daysToPeriod = Math.max(0, daysBetween(day, info.nextPeriod));
+    return {
+      title: '经前期',
+      detail: `预计月经期 ${daysToPeriod} 天后开始。可关注情绪、腹胀、乳房胀痛等变化。`,
+      Icon: Moon,
+      colors: [colors.secondary, colors.gold],
+    };
+  }
+
+  if (day > startOfDay(info.ovulation) && day < startOfDay(pmsStart)) {
+    const lutealDay = daysBetween(info.ovulation, day);
+    const daysToPeriod = Math.max(0, daysBetween(day, info.nextPeriod));
+    return {
+      title: `黄体期第 ${lutealDay} 天`,
+      detail: `预计月经期 ${daysToPeriod} 天后开始。黄体期通常在排卵后到下次月经前。`,
+      Icon: Moon,
+      colors: [colors.secondary, colors.primaryLight],
+    };
+  }
+
+  const daysToFertile = Math.max(0, daysBetween(day, info.fertileStart));
+  return {
+    title: `卵泡期第 ${cycleDay} 天`,
+    detail: daysToFertile > 0 ? `预计排卵期 ${daysToFertile} 天后开始。` : `预计月经期 ${Math.max(0, daysBetween(day, info.nextPeriod))} 天后开始。`,
+    Icon: CalendarDays,
+    colors: [colors.primary, colors.primaryLight],
+  };
+}
+
+function getCalendarNote(sexCount: number, markers: string[]) {
+  if (sexCount) return `${sexCount}次`;
+  if (markers.includes('period')) return '经期';
+  if (markers.includes('predicted')) return '预测';
+  if (markers.includes('ovulation')) return '排卵';
+  if (markers.includes('fertile')) return '易孕';
+  if (markers.includes('pms')) return '经前';
+  return '';
+}
+
+function markerStyle(marker: string) {
+  if (marker === 'partnered-sex') return { backgroundColor: colors.sex };
+  if (marker === 'solo-sex') return { backgroundColor: colors.primary };
+  if (marker === 'period') return { backgroundColor: colors.period };
+  if (marker === 'pms') return { backgroundColor: colors.secondary };
+  if (marker === 'ovulation') return { backgroundColor: colors.primary };
+  if (marker === 'fertile') return { backgroundColor: colors.green };
+  return { backgroundColor: colors.gold };
+}
+
+function buildSexChart(state: AppState, range: 'week' | 'month' | 'year') {
+  if (range === 'week') {
+    const start = addDays(startOfDay(new Date()), -6);
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDays(start, index);
+      const records = getSexRecordsOnDate(state, date);
+      const split = splitSexRecordCounts(records);
+      return {
+        label: new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(date),
+        ...split,
+      };
+    });
+  }
+
+  if (range === 'month') {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const date = addDays(first, index);
+      const records = getSexRecordsOnDate(state, date);
+      const day = index + 1;
+      const showMonthLabel = day === 1 || day === daysInMonth || (day % 5 === 0 && daysInMonth - day > 2);
+      const split = splitSexRecordCounts(records);
+      return {
+        label: showMonthLabel ? String(day) : '',
+        ...split,
+      };
+    });
+  }
+
+  const year = new Date().getFullYear();
+  return Array.from({ length: 12 }, (_, index) => {
+    const records = state.sexRecords
+      .filter((record) => {
+        const date = new Date(record.dateTime);
+        return date.getFullYear() === year && date.getMonth() === index;
+      });
+    return { label: `${index + 1}`, ...splitSexRecordCounts(records) };
+  });
+}
+
+function splitSexRecordCounts(records: SexRecord[]) {
+  return records.reduce(
+    (result, record) => {
+      const count = Number(record.count || 1);
+      if (isSoloSexRecord(record)) {
+        return { ...result, count: result.count + count, soloCount: result.soloCount + count };
+      }
+      return { ...result, count: result.count + count, partneredCount: result.partneredCount + count };
+    },
+    { count: 0, partneredCount: 0, soloCount: 0 }
+  );
+}
+
+function isSoloSexRecord(record: SexRecord) {
+  const types = record.sexTypes?.length ? record.sexTypes : record.sexType ? [record.sexType] : [];
+  return types.some((type) => type.includes('自慰'));
+}
+
+function getSexRecordsOnDate(state: AppState, date: Date) {
+  const key = toDateKey(date);
+  return state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === key);
+}
+
+function getChartMax(chart: { count: number }[], range: 'week' | 'month' | 'year') {
+  const maxValue = Math.max(1, ...chart.map((item) => item.count));
+  const minimum = range === 'year' ? 14 : range === 'month' ? 6 : 4;
+  const raw = Math.max(minimum, maxValue);
+  if (raw <= 6) return 6;
+  if (raw <= 10) return 10;
+  if (raw <= 14) return 14;
+  return Math.ceil(raw / 5) * 5;
+}
+
+function getSexRecordsForRange(state: AppState, range: 'week' | 'month' | 'year') {
+  const now = new Date();
+  if (range === 'week') {
+    const start = addDays(startOfDay(now), -6);
+    return state.sexRecords.filter((record) => startOfDay(new Date(record.dateTime)) >= start && startOfDay(new Date(record.dateTime)) <= startOfDay(now));
+  }
+  if (range === 'month') {
+    return state.sexRecords.filter((record) => {
+      const date = new Date(record.dateTime);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    });
+  }
+  return state.sexRecords.filter((record) => new Date(record.dateTime).getFullYear() === now.getFullYear());
+}
+
+function buildDurationStats(state: AppState, range: 'week' | 'month' | 'year') {
+  const durations = getSexRecordsForRange(state, range)
+    .map((record) => record.durationMinutes || 0)
+    .filter((minutes) => minutes > 0);
+  const totalMinutes = durations.reduce((sum, minutes) => sum + minutes, 0);
+  return {
+    totalMinutes,
+    maxMinutes: durations.length ? Math.max(...durations) : 0,
+    minMinutes: durations.length ? Math.min(...durations) : 0,
+    averageMinutes: durations.length ? Math.round(totalMinutes / durations.length) : 0,
+  };
+}
+
+function buildTimeDistribution(state: AppState, range: 'week' | 'month' | 'year') {
+  const slots = [
+    { label: '00:00~05:59', start: 0, end: 6, color: '#ffc985', count: 0 },
+    { label: '06:00~11:59', start: 6, end: 12, color: '#ff6b78', count: 0 },
+    { label: '12:00~17:59', start: 12, end: 18, color: '#2f80ed', count: 0 },
+    { label: '18:00~23:59', start: 18, end: 24, color: '#62dcc9', count: 0 },
+  ];
+  getSexRecordsForRange(state, range).forEach((record) => {
+    const hour = new Date(record.dateTime).getHours();
+    const slot = slots.find((item) => hour >= item.start && hour < item.end) || slots[0];
+    slot.count += 1;
+  });
+  return slots;
+}
+
+function formatDuration(minutes: number) {
+  if (!minutes) return '0m';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (!hours) return `${mins}m`;
+  return `${hours}h${mins}m`;
+}
+
+function buildSymptomCounts(state: AppState) {
+  const counts = new Map<string, number>();
+  const add = (name: string) => counts.set(name, (counts.get(name) || 0) + 1);
+  state.periodRecords.forEach((record) => record.symptoms.forEach(add));
+  state.symptomRecords.forEach((record) => record.symptoms.forEach(add));
+  return Array.from(counts.entries()).sort((left, right) => right[1] - left[1]);
+}
+
+function createCardShadow(theme: ThemePalette) {
+  return Platform.select({
+    web: {
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 12 },
+    },
+    default: {
+      elevation: 2,
+      shadowColor: theme.shadow,
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 },
+    },
+  });
+}
+
+function createStyles(theme: ThemePalette) {
+  const colors = theme;
+  const cardShadow = createCardShadow(theme);
+
+  return StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+  nativeStage: {
+    flex: 1,
+  },
+  nativeFrame: {
+    flex: 1,
+  },
+  webStage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 18,
+    backgroundColor: '#eef1ff',
+  },
+  webPhoneFrame: {
+    width: 430,
+    maxWidth: '100%',
+    height: 932,
+    maxHeight: '100%',
+    borderRadius: 40,
+    padding: 10,
+    backgroundColor: '#141826',
+    shadowColor: '#191e36',
+    shadowOffset: { width: 0, height: 30 },
+    shadowOpacity: 0.28,
+    shadowRadius: 80,
+  },
+  appContainer: {
+    flex: 1,
+    overflow: 'hidden',
+    borderRadius: Platform.OS === 'web' ? 31 : 0,
+    backgroundColor: colors.bg,
+  },
+  header: {
+    zIndex: 3,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 34 : 20,
+    paddingBottom: 18,
+  },
+  greeting: {
+    flex: 1,
+  },
+  dateLabel: {
+    marginBottom: 6,
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '800',
+    lineHeight: 32,
+  },
+  subtitle: {
+    marginTop: 4,
+    color: colors.sub,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerIconButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+  },
+  mainContent: {
+    zIndex: 2,
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  scrollBody: {
+    paddingBottom: 210,
+  },
+  heroCard: {
+    minHeight: 188,
+    borderRadius: 28,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  heroCopy: {
+    flex: 1,
+    gap: 8,
+  },
+  heroPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    color: colors.primary,
+    backgroundColor: colors.soft,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  heroTitle: {
+    color: colors.text,
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 31,
+  },
+  heroHint: {
+    color: colors.sub,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  cycleBubble: {
+    width: 108,
+    height: 108,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cycleDay: {
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: '900',
+  },
+  cycleDayLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 28,
+  },
+  metricCard: {
+    flex: 1,
+    borderRadius: 24,
+    padding: 13,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  metricLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  metricValue: {
+    marginTop: 5,
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  metricHint: {
+    marginTop: 2,
+    color: colors.sub,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  textAction: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: colors.soft,
+  },
+  textActionText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  recordCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 24,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  recordIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  recordTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  recordMeta: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.dangerSoft,
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  empty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.line,
+    borderRadius: 22,
+    padding: 18,
+    color: colors.sub,
+    backgroundColor: 'rgba(255,255,255,0.64)',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  calendarHeadCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 26,
+    padding: 14,
+    marginBottom: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 12,
+  },
+  roundButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  calendarTitleBox: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  calendarKicker: {
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  calendarTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  calendarWeekLine: {
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  calendarDateLine: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  calendarTodayRow: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  calendarTodayButton: {
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  calendarTodayText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  legendRowBottom: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 18,
+  },
+  predictionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 22,
+    padding: 13,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  predictionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  predictionTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  predictionText: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  dayStatusCard: {
+    borderRadius: 26,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  dayStatusHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dayStatusIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayStatusCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  calendarSelectedTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  calendarRelativePill: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 12,
+    fontWeight: '900',
+    overflow: 'hidden',
+  },
+  calendarRelativeToday: {
+    color: colors.green,
+    backgroundColor: 'rgba(18,184,134,0.12)',
+  },
+  calendarRelativePast: {
+    color: colors.sub,
+    backgroundColor: 'rgba(99,110,114,0.1)',
+  },
+  calendarRelativeFuture: {
+    color: colors.primary,
+    backgroundColor: colors.soft,
+  },
+  dayStatusDate: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  dayStatusTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  dayStatusText: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  dayStatusActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  calendarDayMetrics: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  calendarMetric: {
+    flex: 1,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    backgroundColor: colors.soft,
+  },
+  calendarMetricValue: {
+    color: colors.primary,
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  calendarMetricLabel: {
+    marginTop: 3,
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  dayStatusButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  dayStatusButtonDisabled: {
+    opacity: 0.48,
+  },
+  dayStatusButtonText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  dayStatusButtonTextDisabled: {
+    color: colors.sub,
+  },
+  dayStatusCancelButton: {
+    minHeight: 38,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    backgroundColor: colors.dangerSoft,
+  },
+  dayStatusCancelText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  daySexSection: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: 12,
+    gap: 9,
+  },
+  daySexTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  daySexRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: colors.soft,
+  },
+  daySexIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  daySexCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  daySexMain: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  daySexMeta: {
+    color: colors.sub,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  daySexEmpty: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  legendPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    minHeight: 30,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendIconBubble: {
+    width: 18,
+    height: 18,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendText: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  calendarShell: {
+    borderRadius: 26,
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  weekdayGrid: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    gap: 6,
+  },
+  weekday: {
+    flex: 1,
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  calendarDay: {
+    width: '13.25%',
+    aspectRatio: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+    overflow: 'hidden',
+  },
+  calendarDayOutside: {
+    opacity: 0.34,
+  },
+  calendarDayToday: {
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    backgroundColor: '#fff',
+  },
+  calendarDaySelected: {
+    backgroundColor: 'transparent',
+  },
+  calendarDayActiveFill: {
+    position: 'absolute',
+    inset: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayNumber: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  calendarDayNumberActive: {
+    color: '#fff',
+  },
+  calendarDayNote: {
+    maxWidth: '92%',
+    marginTop: 1,
+    color: colors.sub,
+    fontSize: 8,
+    fontWeight: '800',
+    lineHeight: 11,
+    overflow: 'hidden',
+  },
+  calendarDayNoteActive: {
+    color: 'rgba(255,255,255,0.82)',
+  },
+  calendarDayMarkerRow: {
+    position: 'absolute',
+    right: 5,
+    bottom: 5,
+    flexDirection: 'row',
+    gap: 2,
+  },
+  calendarDayMarkerDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 999,
+  },
+  calendarDayMarkerDotActive: {
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  panel: {
+    borderRadius: 26,
+    padding: 16,
+    marginBottom: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  panelTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 14,
+  },
+  sexChartPanel: {
+    paddingTop: 22,
+    paddingBottom: 16,
+    marginBottom: 16,
+  },
+  segmentedControl: {
+    flexDirection: 'row',
+    gap: 5,
+    borderRadius: 22,
+    padding: 5,
+    marginBottom: 14,
+    backgroundColor: '#ebe9ff',
+  },
+  segmentButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentButtonActive: {
+    backgroundColor: '#fff',
+  },
+  segmentButtonText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  segmentButtonTextActive: {
+    color: colors.primary,
+  },
+  bigMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 20,
+  },
+  bigMetric: {
+    color: colors.text,
+    fontSize: 46,
+    fontWeight: '900',
+    lineHeight: 50,
+  },
+  bigMetricUnit: {
+    color: colors.sub,
+    fontSize: 18,
+    fontWeight: '900',
+    marginLeft: 5,
+    marginBottom: 6,
+  },
+  columnChart: {
+    height: 204,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  chartAxis: {
+    width: 30,
+    height: 188,
+    paddingTop: 2,
+    paddingBottom: 26,
+    justifyContent: 'space-between',
+  },
+  chartAxisLabel: {
+    color: 'rgba(32,38,58,0.52)',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 16,
+    textAlign: 'left',
+  },
+  chartPlot: {
+    flex: 1,
+    position: 'relative',
+    height: 204,
+  },
+  chartGridArea: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 8,
+    height: 160,
+  },
+  chartGridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(115,123,145,0.16)',
+  },
+  chartGridLineTop: {
+    top: 0,
+  },
+  chartGridLineMid: {
+    top: 80,
+  },
+  chartGridLineBase: {
+    top: 160,
+    borderStyle: 'solid',
+    borderColor: 'rgba(115,123,145,0.12)',
+  },
+  columnRow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 8,
+    height: 188,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  columnRowDense: {
+    gap: 3,
+  },
+  columnSlot: {
+    flex: 1,
+    minWidth: 0,
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  columnTrack: {
+    width: 22,
+    height: 160,
+    justifyContent: 'flex-end',
+    alignItems: 'stretch',
+  },
+  columnTrackWeek: {
+    width: 28,
+  },
+  columnTrackMonth: {
+    width: 6,
+  },
+  columnStack: {
+    minHeight: 0,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  columnPart: {
+    minHeight: 0,
+  },
+  columnPartPartnered: {
+    backgroundColor: colors.sex,
+  },
+  columnPartSolo: {
+    backgroundColor: colors.primary,
+  },
+  columnLabel: {
+    marginTop: 8,
+    minHeight: 16,
+    color: 'rgba(32,38,58,0.58)',
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  chartLegendRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  barRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  barLabel: {
+    width: 42,
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  barTrack: {
+    flex: 1,
+    height: 10,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: colors.soft,
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  barValue: {
+    width: 28,
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  durationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+    paddingBottom: 10,
+    marginBottom: 4,
+  },
+  durationHeaderLabel: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  durationHeaderValue: {
+    color: colors.primary,
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  statLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 46,
+  },
+  statLineIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  statLineLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  statLineValue: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  distributionBar: {
+    flexDirection: 'row',
+    height: 34,
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: colors.soft,
+  },
+  distributionSegment: {
+    height: '100%',
+  },
+  distributionEmptySegment: {
+    flex: 1,
+    height: '100%',
+    backgroundColor: colors.soft,
+  },
+  distributionList: {
+    gap: 12,
+  },
+  distributionRow: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  distributionDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  distributionLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  distributionValue: {
+    color: colors.sub,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  summaryTile: {
+    width: '48%',
+    borderRadius: 22,
+    padding: 12,
+    backgroundColor: colors.soft,
+  },
+  summaryLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  summaryValue: {
+    marginTop: 6,
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  tagCloud: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    color: colors.primary,
+    backgroundColor: colors.soft,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  dangerTag: {
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
+  },
+  emptyInline: {
+    color: colors.sub,
+    fontSize: 13,
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderRadius: 26,
+    padding: 18,
+    marginBottom: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  profilePhoto: {
+    width: 74,
+    height: 74,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileMain: {
+    flex: 1,
+  },
+  profileTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  profileDesc: {
+    marginTop: 4,
+    marginBottom: 12,
+    color: colors.sub,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  aboutOverlay: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 30,
+    backgroundColor: colors.bg,
+  },
+  aboutHeader: {
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 34 : 20,
+    paddingBottom: 16,
+  },
+  aboutHeaderCopy: {
+    flex: 1,
+  },
+  aboutTitle: {
+    color: colors.text,
+    fontSize: 27,
+    lineHeight: 32,
+    fontWeight: '900',
+  },
+  aboutScroll: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  aboutBody: {
+    paddingBottom: 34,
+  },
+  aboutHeroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderRadius: 28,
+    padding: 18,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  aboutAppIcon: {
+    width: 78,
+    height: 78,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aboutHeroCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  updateCard: {
+    borderRadius: 28,
+    padding: 16,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  updateCardHeader: {
+    gap: 12,
+    marginBottom: 14,
+  },
+  updateTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+  },
+  updateIconBubble: {
+    width: 42,
+    height: 42,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  updateStatusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    overflow: 'hidden',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  updateStatusLatest: {
+    color: colors.green,
+    backgroundColor: 'rgba(18,184,134,0.12)',
+  },
+  updateStatusAvailable: {
+    color: colors.primary,
+    backgroundColor: colors.soft,
+  },
+  updateStatusFailed: {
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
+  },
+  updateMetaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  updateMetaItem: {
+    width: '48.5%',
+    minHeight: 62,
+    borderRadius: 18,
+    padding: 11,
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  updateMetaValue: {
+    marginTop: 5,
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  updateDetailBox: {
+    borderRadius: 20,
+    padding: 13,
+    marginBottom: 12,
+    backgroundColor: 'rgba(255,255,255,0.68)',
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  updateDetailTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  updateDetailMeta: {
+    marginTop: 4,
+    marginBottom: 9,
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  updateActionRow: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  updateActionButton: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: colors.soft,
+  },
+  updateActionPrimary: {
+    backgroundColor: colors.primary,
+  },
+  updateActionText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  updateActionPrimaryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  updateDiagnostics: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    paddingTop: 12,
+    gap: 10,
+  },
+  updateDiagnosticsTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  updateDiagnosticRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  updateDiagnosticDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  updateDiagnosticDotOk: {
+    backgroundColor: colors.green,
+  },
+  updateDiagnosticDotBad: {
+    backgroundColor: colors.danger,
+  },
+  updateDiagnosticName: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  updateDiagnosticMessage: {
+    marginTop: 2,
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  releaseCard: {
+    borderRadius: 26,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  releaseBulletRow: {
+    flexDirection: 'row',
+    gap: 9,
+    marginTop: 10,
+  },
+  releaseBulletDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 6,
+    backgroundColor: colors.primary,
+  },
+  releaseBulletText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 24,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  settingCopy: {
+    flex: 1,
+  },
+  settingTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  settingHint: {
+    marginTop: 4,
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  settingInput: {
+    width: 86,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: colors.soft,
+    textAlign: 'center',
+    fontWeight: '800',
+  },
+  themePanel: {
+    borderRadius: 24,
+    padding: 14,
+    marginBottom: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  themeOptionGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  themeOption: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: colors.soft,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  themeOptionActive: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderColor: colors.primary,
+  },
+  themeSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 13,
+    marginBottom: 8,
+  },
+  themeOptionCopy: {
+    minWidth: 0,
+  },
+  themeOptionTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  themeOptionTitleActive: {
+    color: colors.primary,
+  },
+  themeOptionHint: {
+    marginTop: 3,
+    color: colors.sub,
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 13,
+  },
+  datePickerField: {
+    gap: 7,
+  },
+  datePickerTrigger: {
+    minHeight: 58,
+    borderRadius: 22,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  datePickerTriggerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  datePickerTriggerCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 3,
+  },
+  datePickerTriggerDate: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  datePickerTriggerMeta: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  datePickerModalRoot: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 18,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 18,
+  },
+  datePickerBackdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(26,31,47,0.22)',
+  },
+  datePickerPanel: {
+    borderRadius: 28,
+    padding: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.82)',
+    ...cardShadow,
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  datePickerNav: {
+    width: 38,
+    height: 38,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  datePickerTitleBox: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  datePickerTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  datePickerSelected: {
+    color: colors.primary,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  datePickerWeek: {
+    flexDirection: 'row',
+    gap: 5,
+    marginBottom: 6,
+  },
+  datePickerWeekday: {
+    flex: 1,
+    color: colors.sub,
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  datePickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  datePickerDay: {
+    width: '13.45%',
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.68)',
+  },
+  datePickerDayMuted: {
+    opacity: 0.34,
+  },
+  datePickerDayToday: {
+    borderWidth: 1,
+    borderColor: 'rgba(124,140,248,0.4)',
+  },
+  datePickerDayActive: {
+    backgroundColor: colors.primary,
+  },
+  datePickerDayText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  datePickerDayTextActive: {
+    color: '#fff',
+  },
+  snackbar: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: Platform.OS === 'ios' ? 96 : 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 18,
+    paddingRight: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: colors.text,
+    ...cardShadow,
+  },
+  snackbarText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  snackbarAction: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  snackbarActionText: {
+    color: colors.primaryLight,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dangerRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    borderRadius: 22,
+    backgroundColor: colors.dangerSoft,
+  },
+  dangerRowTitle: {
+    color: colors.danger,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  timePickerColumns: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 6,
+  },
+  timePickerColumn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+  },
+  timePickerColumnLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  timePickerScroll: {
+    height: 172,
+    alignSelf: 'stretch',
+  },
+  timeOption: {
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  timeOptionActive: {
+    backgroundColor: colors.primary,
+  },
+  timeOptionText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  timeOptionTextActive: {
+    color: '#fff',
+  },
+  durationStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 4,
+  },
+  stepperButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  stepperButtonText: {
+    color: colors.primary,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  stepperValueBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  stepperValue: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  stepperUnit: {
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  timerLaunchButton: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: colors.soft,
+  },
+  timerLaunchText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  durationManualRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 10,
+  },
+  durationManualLabel: {
+    color: colors.sub,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  durationManualInput: {
+    flex: 1,
+    maxWidth: 140,
+    height: 44,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    color: colors.text,
+    backgroundColor: colors.soft,
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  durationScroll: {
+    height: 176,
+    alignSelf: 'stretch',
+  },
+  timerRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+    gap: 26,
+    backgroundColor: colors.bg,
+  },
+  timerClose: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 34,
+    right: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    ...cardShadow,
+  },
+  timerHeading: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  timerRing: {
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  timerDisplay: {
+    color: colors.text,
+    fontSize: 54,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  timerSub: {
+    color: colors.sub,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  timerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  timerGhostButton: {
+    minWidth: 84,
+    height: 54,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.card,
+    ...cardShadow,
+  },
+  timerGhostText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  timerPrimaryButton: {
+    minWidth: 120,
+    height: 60,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  timerPrimaryGradient: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerPrimaryText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  timerHint: {
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scaleRow: {
+    flexDirection: 'row',
+    gap: 7,
+  },
+  scaleButton: {
+    flex: 1,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  scaleButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  scaleText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  scaleTextActive: {
+    color: '#fff',
+  },
+  filterRail: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  viewAllButton: {
+    marginTop: 6,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  viewAllText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  skeletonHero: {
+    height: 132,
+    borderRadius: 28,
+    backgroundColor: colors.soft,
+    marginBottom: 14,
+  },
+  skeletonMetric: {
+    flex: 1,
+    height: 84,
+    borderRadius: 22,
+    backgroundColor: colors.soft,
+  },
+  skeletonLineWide: {
+    width: 120,
+    height: 20,
+    borderRadius: 8,
+    backgroundColor: colors.soft,
+    marginTop: 18,
+    marginBottom: 14,
+  },
+  skeletonCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  skeletonCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: colors.soft,
+  },
+  skeletonCardCopy: {
+    flex: 1,
+    gap: 8,
+  },
+  skeletonLine: {
+    width: '70%',
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.soft,
+  },
+  skeletonLineShort: {
+    width: '40%',
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.soft,
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  datePickerGhostButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  datePickerGhostText: {
+    color: colors.sub,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  datePickerTodayButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  datePickerTodayText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  bottomNav: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    bottom: Platform.OS === 'ios' ? 18 : 14,
+    zIndex: 10,
+    height: 70,
+    borderRadius: 27,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  navItem: {
+    width: 76,
+    height: 54,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  navIconWrap: {
+    width: 30,
+    height: 26,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navIconWrapActive: {
+    backgroundColor: colors.soft,
+  },
+  navLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  navActive: {
+    color: colors.primary,
+  },
+  navDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'transparent',
+  },
+  navDotActive: {
+    backgroundColor: colors.primary,
+  },
+  fab: {
+    position: 'absolute',
+    right: 24,
+    bottom: Platform.OS === 'ios' ? 108 : 104,
+    zIndex: 11,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    ...cardShadow,
+  },
+  fabGradient: {
+    flex: 1,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabBackdrop: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 9,
+    backgroundColor: 'rgba(45,52,54,0.18)',
+  },
+  fabMenu: {
+    position: 'absolute',
+    right: 24,
+    bottom: Platform.OS === 'ios' ? 174 : 170,
+    width: 306,
+    borderRadius: 26,
+    padding: 10,
+    backgroundColor: '#fff',
+    ...cardShadow,
+  },
+  fabMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 20,
+    padding: 10,
+  },
+  fabMenuItemPrimary: {
+    backgroundColor: colors.soft,
+  },
+  fabMenuIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabMenuCopy: {
+    flex: 1,
+  },
+  fabMenuLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  fabMenuDesc: {
+    marginTop: 2,
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(45,52,54,0.38)',
+  },
+  sheetPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    maxHeight: '82%',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
+    backgroundColor: '#fff',
+  },
+  sheetHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 999,
+    alignSelf: 'center',
+    marginBottom: 20,
+    backgroundColor: 'rgba(99,110,114,0.28)',
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    color: colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  sheetClose: {
+    width: 40,
+    height: 40,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(99,110,114,0.1)',
+  },
+  formGrid: {
+    gap: 14,
+    paddingBottom: 20,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: colors.soft,
+  },
+  actionRowDisabled: {
+    opacity: 0.48,
+  },
+  actionRowIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  actionRowIconDanger: {
+    backgroundColor: colors.dangerSoft,
+  },
+  actionRowCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  actionRowTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  actionRowTitleDanger: {
+    color: colors.danger,
+  },
+  actionRowDesc: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  inputGroup: {
+    gap: 7,
+  },
+  inputLabel: {
+    color: colors.sub,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  input: {
+    borderRadius: 19,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: colors.text,
+    backgroundColor: colors.soft,
+  },
+  textarea: {
+    minHeight: 88,
+    textAlignVertical: 'top',
+  },
+  optionSection: {
+    gap: 7,
+  },
+  optionCard: {
+    borderRadius: 19,
+    padding: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    gap: 10,
+  },
+  switchOption: {
+    minHeight: 58,
+    borderRadius: 17,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.58)',
+  },
+  switchCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  switchLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  switchHint: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  prettySwitch: {
+    width: 62,
+    height: 34,
+    borderRadius: 999,
+    padding: 4,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(156,158,181,0.28)',
+  },
+  prettySwitchActive: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.primaryLight,
+  },
+  prettySwitchThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  prettySwitchThumbActive: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+  selectOption: {
+    minHeight: 58,
+    borderRadius: 17,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.58)',
+  },
+  iconChoiceGrid: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  iconChoiceItem: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: 8,
+  },
+  aphroditeIconBubble: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(245,163,174,0.22)',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  aphroditeIconBubbleActive: {
+    backgroundColor: colors.soft,
+    borderColor: colors.primary,
+  },
+  aphroditeIconText: {
+    fontSize: 25,
+    fontWeight: '900',
+  },
+  iconChoiceLabel: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
+    fontWeight: '900',
+  },
+  iconChoiceLabelActive: {
+    color: colors.primary,
+  },
+  miniChoiceRail: {
+    gap: 10,
+    paddingRight: 8,
+  },
+  miniChoice: {
+    width: 68,
+    height: 74,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.soft,
+  },
+  miniChoiceActive: {
+    backgroundColor: colors.primary,
+  },
+  miniChoiceGlyph: {
+    color: colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  miniChoiceGlyphActive: {
+    color: '#fff',
+  },
+  miniChoiceText: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  miniChoiceTextActive: {
+    color: '#fff',
+  },
+  sheetSegment: {
+    flexDirection: 'row',
+    borderRadius: 18,
+    padding: 4,
+    backgroundColor: colors.soft,
+    gap: 4,
+  },
+  sheetSegmentButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetSegmentButtonActive: {
+    backgroundColor: '#fff',
+  },
+  sheetSegmentText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  sheetSegmentTextActive: {
+    color: colors.primary,
+  },
+  ratingPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  ratingButton: {
+    flex: 1,
+    height: 66,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,224,128,0.28)',
+  },
+  ratingButtonActive: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+  ratingStars: {
+    color: '#5c3a92',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  moodPicker: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  moodButton: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+  },
+  moodFace: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  moodFaceActive: {
+    borderColor: colors.primary,
+  },
+  moodLabel: {
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  moodLabelActive: {
+    color: colors.primary,
+  },
+  sheetChipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  sheetChip: {
+    borderRadius: 999,
+    paddingHorizontal: 11,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  sheetChipActive: {
+    backgroundColor: colors.primary,
+  },
+  sheetChipText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sheetChipTextActive: {
+    color: '#fff',
+  },
+  primaryButton: {
+    minHeight: 54,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  primaryButtonGradient: {
+    minHeight: 54,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 15,
+  },
+});
+}
+
+let styles = createStyles(colors);
