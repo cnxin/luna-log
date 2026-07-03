@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "releaseDate": "2026-07-04",
+  "title": "Luna Log mobile demo",
+  "highlights": [
+    "完成手机壳预览、首页、日历、统计和设置四个主界面",
+    "做爱和自慰拆分为独立入口，并补充 Aphrodite 风格的记录项",
+    "日历支持经期、易孕期和亲密记录标记，统计支持周/月/年查看",
+    "加入原版、薄荷、蓝色三套 LifeLog 风格视觉主题",
+    "新增关于界面的更新检查、版本说明和来源诊断"
+  ],
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases",
+  "fileSize": 0,
+  "mandatory": false
+}
