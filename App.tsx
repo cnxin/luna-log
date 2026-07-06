@@ -2723,22 +2723,22 @@ type IconName =
   | 'moodHappy'
   | 'moodJoy';
 
-function PoseFigure({ x, y, scale = 1, rotate = 0, flip = false, fill }: { x: number; y: number; scale?: number; rotate?: number; flip?: boolean; fill: string }) {
+function PosePerson({ x, y, scale = 1, rotate = 0, flip = false, stroke }: { x: number; y: number; scale?: number; rotate?: number; flip?: boolean; stroke: string }) {
   const mirror = flip ? -1 : 1;
   return (
     <G transform={`translate(${x} ${y}) rotate(${rotate}) scale(${mirror * scale} ${scale})`}>
-      <Circle cx={0} cy={-7.5} r={2.7} fill={fill} />
-      <Path d="M-1.8 -4.5 Q2.2 -2.8 2.8 2.5 Q1.2 5.8 -2.7 4.6 Q-4.8 1 -3.2 -2.9 Z" fill={fill} />
-      <Path d="M-2.5 3.6 Q-7.4 5.6 -8.8 10.7" stroke={fill} strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <Path d="M1.8 3.8 Q6.7 6.2 8.3 10.4" stroke={fill} strokeWidth={2.4} strokeLinecap="round" fill="none" />
-      <Path d="M-2.5 -1 Q-7.1 0.8 -9.2 4.2" stroke={fill} strokeWidth={2.1} strokeLinecap="round" fill="none" />
-      <Path d="M2 -1 Q6.7 0.9 8.9 4" stroke={fill} strokeWidth={2.1} strokeLinecap="round" fill="none" />
+      <Circle cx={0} cy={-8} r={2.5} fill={stroke} />
+      <Path d="M0 -5 L0 2" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
+      <Path d="M0 -2 L-5 1" stroke={stroke} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+      <Path d="M0 -1 L5 2" stroke={stroke} strokeWidth={2.6} strokeLinecap="round" fill="none" />
+      <Path d="M0 2 L-5 8" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
+      <Path d="M0 2 L6 7" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
     </G>
   );
 }
 
-function PoseGround({ y = 26, color = 'rgba(124,112,176,0.18)' }: { y?: number; color?: string }) {
-  return <Line x1={5.5} y1={y} x2={26.5} y2={y} stroke={color} strokeWidth={2.2} strokeLinecap="round" />;
+function PoseCurve({ d, stroke, width = 2.4 }: { d: string; stroke: string; width?: number }) {
+  return <Path d={d} stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
 }
 
 function CartoonIcon({ name, size = 27, active = false, color }: { name: IconName; size?: number; active?: boolean; color?: string }) {
@@ -2808,57 +2808,60 @@ function CartoonIcon({ name, size = 27, active = false, color }: { name: IconNam
     case 'sideLying':
       return svg(
         <>
-          <PoseGround y={25.7} />
-          <PoseFigure x={12.5} y={20.4} scale={0.78} rotate={80} fill={main} />
-          <PoseFigure x={21.2} y={16.1} scale={0.72} rotate={82} fill={main} />
+          <PoseCurve d="M6 22 C11 17 20 17 26 22" stroke={main} width={3.2} />
+          <Circle cx={8} cy={21.3} r={2.4} fill={main} />
+          <Circle cx={24} cy={21.3} r={2.4} fill={main} />
+          <PoseCurve d="M10 22 L15 18 L21 22" stroke={main} />
         </>
       );
     case 'prone':
       return svg(
         <>
-          <PoseGround y={25.8} />
-          <PoseFigure x={13.2} y={21.8} scale={0.76} rotate={88} fill={main} />
-          <PoseFigure x={22.4} y={20.2} scale={0.68} rotate={98} flip fill={main} />
+          <PoseCurve d="M5.5 22 H26.5" stroke={main} width={3.3} />
+          <Circle cx={8} cy={19} r={2.4} fill={main} />
+          <Circle cx={24} cy={19} r={2.4} fill={main} />
+          <PoseCurve d="M11 22 C15 17 19 17 23 22" stroke={main} />
         </>
       );
     case 'rear':
       return svg(
         <>
-          <PoseGround y={25.6} />
-          <PoseFigure x={11.4} y={18.2} scale={0.7} rotate={28} fill={main} />
-          <PoseFigure x={22.2} y={16.3} scale={0.72} rotate={-46} flip fill={main} />
+          <PosePerson x={10.5} y={19} scale={0.68} rotate={70} stroke={main} />
+          <PosePerson x={22.2} y={17.5} scale={0.68} rotate={-32} flip stroke={main} />
+          <PoseCurve d="M10 25 H24" stroke={main} width={2.6} />
         </>
       );
     case 'cowgirl':
       return svg(
         <>
-          <PoseGround y={25.5} />
-          <PoseFigure x={16.5} y={22.2} scale={0.7} rotate={88} fill={main} />
-          <PoseFigure x={16.2} y={12.7} scale={0.72} rotate={0} fill={main} />
+          <PoseCurve d="M7 23 H25" stroke={main} width={3} />
+          <Circle cx={9.5} cy={20.5} r={2.3} fill={main} />
+          <PoseCurve d="M12 23 C15 18 20 18 23 23" stroke={main} />
+          <PosePerson x={16} y={13.5} scale={0.62} rotate={0} stroke={main} />
         </>
       );
     case 'kneel':
       return svg(
         <>
-          <PoseGround y={25.7} />
-          <PoseFigure x={11.5} y={17.5} scale={0.68} rotate={12} fill={main} />
-          <PoseFigure x={21.5} y={17.5} scale={0.68} rotate={-12} flip fill={main} />
+          <PosePerson x={10.8} y={18.8} scale={0.64} rotate={18} stroke={main} />
+          <PosePerson x={22} y={18.8} scale={0.64} rotate={-18} flip stroke={main} />
+          <PoseCurve d="M8 25 C12 23.5 20 23.5 24 25" stroke={main} width={2.6} />
         </>
       );
     case 'embrace':
       return svg(
         <>
-          <PoseFigure x={12.8} y={18.2} scale={0.72} rotate={-4} fill={main} />
-          <PoseFigure x={19.5} y={18.2} scale={0.72} rotate={4} flip fill={main} />
-          <Path d="M10.8 15 Q16 19.5 21.2 15" stroke={main} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.9} />
+          <PosePerson x={12.2} y={18.5} scale={0.66} rotate={-6} stroke={main} />
+          <PosePerson x={20} y={18.5} scale={0.66} rotate={6} flip stroke={main} />
+          <PoseCurve d="M10 15 C13 19 19 19 22 15" stroke={main} />
         </>
       );
     case 'standing':
       return svg(
         <>
-          <PoseGround y={26} />
-          <PoseFigure x={11.3} y={18.5} scale={0.72} rotate={-8} fill={main} />
-          <PoseFigure x={21} y={18.4} scale={0.72} rotate={10} flip fill={main} />
+          <PosePerson x={11.5} y={18.7} scale={0.68} rotate={-4} stroke={main} />
+          <PosePerson x={21.2} y={18.5} scale={0.68} rotate={5} flip stroke={main} />
+          <PoseCurve d="M14 18 H18.5" stroke={main} width={2.2} />
         </>
       );
     default: {
@@ -6042,7 +6045,7 @@ function createStyles(theme: ThemePalette) {
     backgroundColor: colors.soft,
   },
   miniChoiceActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: 'rgba(124,112,224,0.12)',
   },
   positionIconBubble: {
     width: 54,
@@ -6050,10 +6053,10 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 27,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(124,112,224,0.16)',
+    backgroundColor: 'rgba(171,163,255,0.22)',
   },
   positionIconBubbleActive: {
-    backgroundColor: 'rgba(124,112,224,0.26)',
+    backgroundColor: 'rgba(171,163,255,0.34)',
     borderWidth: 2,
     borderColor: colors.primary,
   },
@@ -6063,7 +6066,7 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '800',
   },
   miniChoiceTextActive: {
-    color: '#fff',
+    color: colors.primary,
   },
   sheetSegment: {
     flexDirection: 'row',
