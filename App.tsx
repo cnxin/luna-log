@@ -473,9 +473,67 @@ function monthLabel(date: Date) {
 
 const lunarDayFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { day: 'numeric' });
 const lunarMonthFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long' });
+const lunarMonthDayFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long', day: 'numeric' });
+
+const solarTermLabels: Record<string, string> = {
+  '01-05': '小寒',
+  '01-20': '大寒',
+  '02-04': '立春',
+  '02-19': '雨水',
+  '03-05': '惊蛰',
+  '03-20': '春分',
+  '04-04': '清明',
+  '04-20': '谷雨',
+  '05-05': '立夏',
+  '05-21': '小满',
+  '06-05': '芒种',
+  '06-21': '夏至',
+  '07-07': '小暑',
+  '07-22': '大暑',
+  '08-07': '立秋',
+  '08-23': '处暑',
+  '09-07': '白露',
+  '09-23': '秋分',
+  '10-08': '寒露',
+  '10-23': '霜降',
+  '11-07': '立冬',
+  '11-22': '小雪',
+  '12-07': '大雪',
+  '12-21': '冬至',
+};
+
+const lunarFestivalLabels: Record<string, string> = {
+  '正月-1': '春节',
+  '正月-15': '元宵',
+  '二月-2': '龙抬头',
+  '五月-5': '端午',
+  '七月-7': '七夕',
+  '七月-15': '中元',
+  '八月-15': '中秋',
+  '九月-9': '重阳',
+  '腊月-8': '腊八',
+  '腊月-23': '小年',
+};
+
+function solarDateKey(date: Date) {
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function lunarParts(date: Date) {
+  const parts = lunarMonthDayFormatter.formatToParts(date);
+  return {
+    month: parts.find((part) => part.type === 'month')?.value || '',
+    day: parts.find((part) => part.type === 'day')?.value || '',
+  };
+}
 
 function lunarDayLabel(date: Date) {
   try {
+    const term = solarTermLabels[solarDateKey(date)];
+    if (term) return term;
+    const lunar = lunarParts(date);
+    const festival = lunarFestivalLabels[`${lunar.month}-${lunar.day}`];
+    if (festival) return festival;
     const day = lunarDayFormatter.format(date);
     if (day === '1' || day === '初一') return `${lunarMonthFormatter.format(date).replace('月', '')}月`;
     return day;
