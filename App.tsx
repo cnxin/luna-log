@@ -191,7 +191,7 @@ type AppUpdateInfo = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const UPDATE_SOURCES: UpdateSource[] = [
   {
@@ -207,6 +207,16 @@ const UPDATE_SOURCES: UpdateSource[] = [
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.0.2',
+    date: '2026-07-06',
+    title: '数据备份、内置更新和体验优化',
+    highlights: [
+      '设置页加入 JSON 数据导入/导出，支持本地备份和恢复',
+      '关于页加入内置更新包下载入口，并保留外部下载兜底',
+      '统计页增加无数据和少量数据空态，避免新用户看到空指标',
+      '新增记录表单会自动预填同类型上次选择，减少重复输入',
+    ],
+  },  {
     version: '1.0.1',
     date: '2026-07-04',
     title: '移动端 Demo 和记录体验',
