@@ -19,7 +19,7 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 - GitHub 仓库：`https://github.com/cnxin/luna-log`
 - 应用名称：`Luna Log`
 - Expo slug：`luna-log`
-- 当前版本：`1.0.0`
+- 当前版本：`1.0.1`
 - Android 包名：`com.anonymous.lunalog`
 
 ## 开发运行
@@ -90,13 +90,13 @@ android/app/build/outputs/apk/debug/app-debug.apk
 当前版本 Release：
 
 ```text
-https://github.com/cnxin/luna-log/releases/tag/v1.0.0
+https://github.com/cnxin/luna-log/releases/tag/v1.0.1
 ```
 
 Android APK：
 
 ```text
-https://github.com/cnxin/luna-log/releases/download/v1.0.0/luna-log-v1.0.0-release.apk
+https://github.com/cnxin/luna-log/releases/download/v1.0.1/luna-log-v1.0.1-release.apk
 ```
 
 ## 更新清单
