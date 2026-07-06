@@ -1044,6 +1044,7 @@ export default function App() {
 
             <EntrySheet
               type={sheetType}
+              state={state}
               editingSexRecord={editingSexRecord}
               editingPeriodRecord={editingPeriodRecord}
               editingSymptomRecord={editingSymptomRecord}
@@ -1854,6 +1855,7 @@ function UpdateMeta({ label, value }: { label: string; value: string }) {
 }
 
 function EntrySheet({
+  state,
   type,
   editingSexRecord,
   editingPeriodRecord,
@@ -1863,6 +1865,7 @@ function EntrySheet({
   onSavePeriod,
   onSaveSymptom,
 }: {
+  state: AppState;
   type: SheetType | null;
   editingSexRecord?: SexRecord | null;
   editingPeriodRecord?: PeriodRecord | null;
@@ -1898,9 +1901,11 @@ function EntrySheet({
   const [flow, setFlow] = useState('medium');
   const [pain, setPain] = useState('0');
   const [symptoms, setSymptoms] = useState<string[]>([]);
+  const [prefillUsed, setPrefillUsed] = useState(false);
 
   useEffect(() => {
     if (!type) return;
+    setPrefillUsed(false);
     if (isSexSheet(type) && editingSexRecord) {
       const value = new Date(editingSexRecord.dateTime);
       setDate(toDateKey(value));
@@ -1974,7 +1979,36 @@ function EntrySheet({
     setFlow('medium');
     setPain('0');
     setSymptoms([]);
-  }, [type, editingSexRecord, editingPeriodRecord, editingSymptomRecord]);
+
+    const latestSexRecord = isSexSheet(type)
+      ? state.sexRecords
+          .filter((record) => sexSheetTypeForRecord(record) === type)
+          .sort((left, right) => new Date(right.dateTime).getTime() - new Date(left.dateTime).getTime())[0]
+      : null;
+
+    if (type === 'partneredSex' && latestSexRecord) {
+      setMood(latestSexRecord.mood || '');
+      setPositions(latestSexRecord.positions || []);
+      setProtectionMethods(latestSexRecord.protectionMethods?.length ? latestSexRecord.protectionMethods : latestSexRecord.protection ? [latestSexRecord.protection] : []);
+      setPrefillUsed(Boolean(latestSexRecord.mood || latestSexRecord.positions?.length || latestSexRecord.protectionMethods?.length || latestSexRecord.protection));
+    } else if (type === 'soloSex' && latestSexRecord) {
+      setMood(latestSexRecord.mood || '');
+      setSoloTools(latestSexRecord.soloTools?.length ? latestSexRecord.soloTools : ['Hand Job']);
+      setPrefillUsed(Boolean(latestSexRecord.mood || latestSexRecord.soloTools?.length));
+    } else if (type === 'period') {
+      const latestPeriod = [...state.periodRecords].sort((left, right) => right.startDate.localeCompare(left.startDate))[0];
+      if (latestPeriod) {
+        setSymptoms(latestPeriod.symptoms || []);
+        setPrefillUsed(Boolean(latestPeriod.symptoms?.length));
+      }
+    } else if (type === 'symptom') {
+      const latestSymptom = [...state.symptomRecords].sort((left, right) => right.date.localeCompare(left.date))[0];
+      if (latestSymptom) {
+        setSymptoms(latestSymptom.symptoms || []);
+        setPrefillUsed(Boolean(latestSymptom.symptoms?.length));
+      }
+    }
+  }, [type, editingSexRecord, editingPeriodRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.symptomRecords]);
 
   function toggleSymptom(value: string) {
     setSymptoms((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
@@ -2071,6 +2105,7 @@ function EntrySheet({
 
         <ScrollView showsVerticalScrollIndicator={false}>
           <View style={styles.formGrid}>
+            {prefillUsed && <Text style={styles.prefillHint}>已自动填入上次的选择，可修改</Text>}
             <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
             {sexMode && <TimePickerField label="时间" value={time} onChange={setTime} />}
             {sexMode && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
@@ -5849,6 +5884,17 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 12,
     lineHeight: 16,
+  },
+  prefillHint: {
+    alignSelf: 'flex-start',
+    color: colors.primary,
+    backgroundColor: colors.soft,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    overflow: 'hidden',
+    fontSize: 12,
+    fontWeight: '800',
   },
   inputGroup: {
     gap: 7,
