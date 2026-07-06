@@ -1,5 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import {
   Activity,
@@ -27,6 +30,7 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  Upload,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -333,6 +337,52 @@ const initialState: AppState = {
   },
 };
 
+type LunaLogExport = {
+  version: number;
+  app: 'Luna Log';
+  storageKey: string;
+  appVersion: string;
+  exportedAt: string;
+  data: AppState;
+};
+
+function normalizeImportedState(value: unknown): AppState | null {
+  if (!value || typeof value !== 'object') return null;
+  const maybeWrapped = value as { data?: unknown };
+  const source = maybeWrapped.data && typeof maybeWrapped.data === 'object' ? maybeWrapped.data : value;
+  const data = source as Partial<AppState>;
+  if (!Array.isArray(data.sexRecords) || !Array.isArray(data.periodRecords) || !Array.isArray(data.symptomRecords)) return null;
+  const importedSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
+  return {
+    sexRecords: data.sexRecords,
+    periodRecords: data.periodRecords,
+    symptomRecords: data.symptomRecords,
+    settings: { ...initialState.settings, ...importedSettings },
+  };
+}
+
+function hasAnyUserData(state: AppState) {
+  return state.sexRecords.length > 0 || state.periodRecords.length > 0 || state.symptomRecords.length > 0;
+}
+
+function downloadJsonOnWeb(filename: string, json: string) {
+  const webGlobal = globalThis as typeof globalThis & {
+    document?: { createElement: (tag: string) => { href: string; download: string; click: () => void }; body?: { appendChild: (node: unknown) => void; removeChild: (node: unknown) => void } };
+    URL?: { createObjectURL: (value: Blob) => string; revokeObjectURL: (url: string) => void };
+  };
+  if (!webGlobal.document || !webGlobal.URL) return false;
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const url = webGlobal.URL.createObjectURL(blob);
+  const link = webGlobal.document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  webGlobal.document.body?.appendChild(link);
+  link.click();
+  webGlobal.document.body?.removeChild(link);
+  webGlobal.URL.revokeObjectURL(url);
+  return true;
+}
+
 const screenCopy: Record<Screen, { title: string; subtitle: string }> = {
   home: { title: '下午好', subtitle: '从今天的一次小记录开始' },
   calendar: { title: '日历', subtitle: '经期、易孕期和亲密记录' },
@@ -591,6 +641,7 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateDiagnostics, setUpdateDiagnostics] = useState<UpdateSourceDiagnostic[]>([]);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateDownload, setUpdateDownload] = useState({ downloading: false, progress: 0 });
   const [notice, setNotice] = useState<{ message: string; action?: { label: string; run: () => void } } | null>(null);
   const loadedRef = useRef(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -685,6 +736,111 @@ export default function App() {
     ]);
   }
 
+  async function handleExportData() {
+    if (!hasAnyUserData(state)) {
+      Alert.alert('无数据', '当前没有记录可以导出');
+      return;
+    }
+    try {
+      const filename = `luna-log-${Date.now()}.json`;
+      const exportObj: LunaLogExport = {
+        version: 1,
+        app: 'Luna Log',
+        storageKey,
+        appVersion: APP_VERSION,
+        exportedAt: new Date().toISOString(),
+        data: state,
+      };
+      const json = JSON.stringify(exportObj, null, 2);
+      if (Platform.OS === 'web') {
+        if (!downloadJsonOnWeb(filename, json)) throw new Error('web download unavailable');
+        showNotice('已导出数据备份');
+        return;
+      }
+      if (!FileSystem.documentDirectory) throw new Error('document directory unavailable');
+      const path = `${FileSystem.documentDirectory}${filename}`;
+      await FileSystem.writeAsStringAsync(path, json, { encoding: FileSystem.EncodingType.UTF8 });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: '导出 Luna Log 数据' });
+      } else {
+        showNotice('已导出到应用文档目录');
+      }
+    } catch {
+      Alert.alert('导出失败', '无法生成数据备份，请稍后再试');
+    }
+  }
+
+  async function handleImportData() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: 'application/json', copyToCacheDirectory: true });
+      if (result.canceled) return;
+      const asset = result.assets?.[0];
+      if (!asset?.uri) throw new Error('missing file');
+      const webFile = (asset as unknown as { file?: { text?: () => Promise<string> } }).file;
+      const content = webFile?.text ? await webFile.text() : await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
+      const imported = JSON.parse(content) as unknown;
+      const nextState = normalizeImportedState(imported);
+      if (!nextState) {
+        Alert.alert('格式错误', '文件格式不正确，未找到 Luna Log 备份数据');
+        return;
+      }
+      Alert.alert('导入数据', '导入会覆盖当前本地记录，是否继续？', [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '导入',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.setItem(storageKey, JSON.stringify(nextState));
+              setState(nextState);
+              showNotice('导入成功，数据已恢复');
+            } catch {
+              Alert.alert('导入失败', '写入本地数据失败，请稍后再试');
+            }
+          },
+        },
+      ]);
+    } catch {
+      Alert.alert('导入失败', '无法读取或解析这个 JSON 文件');
+    }
+  }
+
+  async function handleDownloadUpdate(info?: AppUpdateInfo | null) {
+    const downloadUrl = info?.downloadUrl;
+    if (!downloadUrl) {
+      showNotice('暂无可下载的安装包');
+      return;
+    }
+    if (Platform.OS === 'web') {
+      openExternalUrl(downloadUrl);
+      return;
+    }
+    if (!FileSystem.documentDirectory) {
+      openExternalUrl(downloadUrl);
+      return;
+    }
+    if (updateDownload.downloading) return;
+    setUpdateDownload({ downloading: true, progress: 0 });
+    try {
+      const filename = `luna-log-v${info.latestVersion}.apk`;
+      const target = `${FileSystem.documentDirectory}${filename}`;
+      const download = FileSystem.createDownloadResumable(downloadUrl, target, {}, (progress) => {
+        const expected = progress.totalBytesExpectedToWrite || 0;
+        const ratio = expected > 0 ? progress.totalBytesWritten / expected : 0;
+        setUpdateDownload({ downloading: true, progress: Math.max(0, Math.min(1, ratio)) });
+      });
+      const result = await download.downloadAsync();
+      setUpdateDownload({ downloading: false, progress: 1 });
+      if (result?.uri && (await Sharing.isAvailableAsync())) {
+        await Sharing.shareAsync(result.uri, { mimeType: 'application/vnd.android.package-archive', dialogTitle: '安装 Luna Log 更新' });
+      } else {
+        openExternalUrl(downloadUrl);
+      }
+    } catch {
+      setUpdateDownload({ downloading: false, progress: 0 });
+      Alert.alert('下载失败', '无法下载更新包，请尝试外部下载');
+    }
+  }
   async function handleCheckUpdate() {
     if (isCheckingUpdate) return;
     setIsCheckingUpdate(true);
@@ -831,6 +987,8 @@ export default function App() {
                   state={state}
                   onPatch={(settings) => patchState((current) => ({ ...current, settings: { ...current.settings, ...settings } }))}
                   onClear={clearRecords}
+                  onExportData={handleExportData}
+                  onImportData={handleImportData}
                 />
               )}
             </ScrollView>
@@ -872,6 +1030,8 @@ export default function App() {
               checking={isCheckingUpdate}
               onClose={() => setAboutOpen(false)}
               onCheckUpdate={handleCheckUpdate}
+              onDownloadUpdate={() => handleDownloadUpdate(updateInfo)}
+              updateDownload={updateDownload}
               onOpenUrl={openExternalUrl}
             />
 
@@ -1400,7 +1560,19 @@ function InsightsScreen({
   );
 }
 
-function SettingsScreen({ state, onPatch, onClear }: { state: AppState; onPatch: (settings: Partial<AppState['settings']>) => void; onClear: () => void }) {
+function SettingsScreen({
+  state,
+  onPatch,
+  onClear,
+  onExportData,
+  onImportData,
+}: {
+  state: AppState;
+  onPatch: (settings: Partial<AppState['settings']>) => void;
+  onClear: () => void;
+  onExportData: () => void;
+  onImportData: () => void;
+}) {
   return (
     <View>
       <View style={styles.profileCard}>
@@ -1452,6 +1624,26 @@ function SettingsScreen({ state, onPatch, onClear }: { state: AppState; onPatch:
       <NumberSetting label="周期长度" hint="经期记录不足 3 次时的默认预测值" value={state.settings.cycleDays} onChange={(cycleDays) => onPatch({ cycleDays })} />
       <NumberSetting label="经期天数" hint="用于日历经期标记" value={state.settings.periodDays} onChange={(periodDays) => onPatch({ periodDays })} />
 
+      <View style={styles.themePanel}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.settingTitle}>数据管理</Text>
+          <Text style={styles.settingHint}>导出 JSON 备份，或从备份恢复本地记录</Text>
+        </View>
+        <Pressable style={styles.settingRowCompact} onPress={onExportData}>
+          <Download color={colors.primary} size={19} strokeWidth={2.6} />
+          <View style={styles.settingCopy}>
+            <Text style={styles.settingTitle}>导出数据</Text>
+            <Text style={styles.settingHint}>备份到文件</Text>
+          </View>
+        </Pressable>
+        <Pressable style={styles.settingRowCompact} onPress={onImportData}>
+          <Upload color={colors.primary} size={19} strokeWidth={2.6} />
+          <View style={styles.settingCopy}>
+            <Text style={styles.settingTitle}>导入数据</Text>
+            <Text style={styles.settingHint}>从备份恢复并覆盖当前本地数据</Text>
+          </View>
+        </Pressable>
+      </View>
       <Pressable style={styles.dangerRow} onPress={onClear}>
         <View style={styles.settingCopy}>
           <Text style={styles.dangerRowTitle}>重置所有数据</Text>
@@ -1470,6 +1662,8 @@ function AboutScreen({
   checking,
   onClose,
   onCheckUpdate,
+  onDownloadUpdate,
+  updateDownload,
   onOpenUrl,
 }: {
   visible: boolean;
@@ -1478,6 +1672,8 @@ function AboutScreen({
   checking: boolean;
   onClose: () => void;
   onCheckUpdate: () => void;
+  onDownloadUpdate: () => void;
+  updateDownload: { downloading: boolean; progress: number };
   onOpenUrl: (url?: string) => void;
 }) {
   if (!visible) return null;
@@ -1571,16 +1767,21 @@ function AboutScreen({
               {checking ? <ActivityIndicator color="#fff" size="small" /> : <RefreshCw color="#fff" size={17} strokeWidth={2.7} />}
               <Text style={styles.updateActionPrimaryText}>{checking ? '检查中' : '检查'}</Text>
             </Pressable>
+            {updateInfo?.status === 'available' && updateInfo.downloadUrl && (
+              <Pressable style={styles.updateActionButton} onPress={onDownloadUpdate} disabled={updateDownload.downloading}>
+                {updateDownload.downloading ? <ActivityIndicator color={colors.primary} size="small" /> : <Download color={colors.primary} size={17} strokeWidth={2.7} />}
+                <Text style={styles.updateActionText}>{updateDownload.downloading ? `下载中 ${Math.round(updateDownload.progress * 100)}%` : '内置下载'}</Text>
+              </Pressable>
+            )}
             <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(primaryUrl)}>
               {updateInfo?.status === 'available' ? (
-                <Download color={colors.primary} size={17} strokeWidth={2.7} />
+                <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
               ) : (
                 <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
               )}
-              <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '下载更新' : '项目主页'}</Text>
+              <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '外部下载' : '项目主页'}</Text>
             </Pressable>
           </View>
-
           {diagnostics.length > 0 && (
             <View style={styles.updateDiagnostics}>
               <Text style={styles.updateDiagnosticsTitle}>来源诊断</Text>
@@ -4795,6 +4996,16 @@ function createStyles(theme: ThemePalette) {
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '800',
+  },
+  settingRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    padding: 13,
+    backgroundColor: 'rgba(255,255,255,0.68)',
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   settingRow: {
     flexDirection: 'row',
