@@ -955,17 +955,20 @@ function HomeScreen({
   const visible = showAll ? filtered : filtered.slice(0, 20);
   return (
     <View>
-      <LinearGradient colors={colors.heroGradient} style={styles.heroCard}>
-        <View style={styles.heroCopy}>
-          <Text style={styles.heroPill}>{cycleStatus.pill}</Text>
-          <Text style={styles.heroTitle}>{cycleStatus.title}</Text>
-          <Text style={styles.heroHint}>{cycleStatus.hint}</Text>
+      <View style={styles.heroCardShell}>
+        <View style={styles.heroCard}>
+          <LinearGradient colors={colors.heroGradient} style={styles.heroCardGradient} />
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroPill}>{cycleStatus.pill}</Text>
+            <Text style={styles.heroTitle}>{cycleStatus.title}</Text>
+            <Text style={styles.heroHint}>{cycleStatus.hint}</Text>
+          </View>
+          <LinearGradient colors={colors.bubbleGradient} style={styles.cycleBubble}>
+            <Text style={styles.cycleDay}>{cycleInfo ? cycleInfo.normalizedDay : '--'}</Text>
+            <Text style={styles.cycleDayLabel}>day</Text>
+          </LinearGradient>
         </View>
-        <LinearGradient colors={colors.bubbleGradient} style={styles.cycleBubble}>
-          <Text style={styles.cycleDay}>{cycleInfo ? cycleInfo.normalizedDay : '--'}</Text>
-          <Text style={styles.cycleDayLabel}>day</Text>
-        </LinearGradient>
-      </LinearGradient>
+      </View>
 
       <View style={styles.quickGrid}>
         <MetricCard label="本月" value={String(stats.monthSexCount)} hint="性生活次数" />
@@ -3591,6 +3594,12 @@ function createStyles(theme: ThemePalette) {
   scrollBody: {
     paddingBottom: 210,
   },
+  heroCardShell: {
+    minHeight: 188,
+    borderRadius: 28,
+    backgroundColor: colors.card,
+    ...cardShadow,
+  },
   heroCard: {
     minHeight: 188,
     borderRadius: 28,
@@ -3600,7 +3609,16 @@ function createStyles(theme: ThemePalette) {
     gap: 14,
     borderWidth: 1,
     borderColor: colors.line,
-    ...cardShadow,
+    overflow: 'hidden',
+    backgroundColor: colors.card,
+  },
+  heroCardGradient: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 28,
   },
   heroCopy: {
     flex: 1,
@@ -3633,6 +3651,7 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 38,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   cycleDay: {
     color: colors.text,
