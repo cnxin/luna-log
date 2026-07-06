@@ -471,6 +471,18 @@ function monthLabel(date: Date) {
   return `${date.getFullYear()}年 ${date.getMonth() + 1}月`;
 }
 
+const lunarDayFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { day: 'numeric' });
+const lunarMonthFormatter = new Intl.DateTimeFormat('zh-CN-u-ca-chinese', { month: 'long' });
+
+function lunarDayLabel(date: Date) {
+  try {
+    const day = lunarDayFormatter.format(date);
+    if (day === '1' || day === '初一') return `${lunarMonthFormatter.format(date).replace('月', '')}月`;
+    return day;
+  } catch {
+    return '';
+  }
+}
 function relativeDateLabel(date: Date) {
   const diff = daysBetween(new Date(), date);
   if (diff === 0) return { label: '今天', tone: 'today' as const };
@@ -1435,11 +1447,8 @@ function CalendarScreen({
       <View style={styles.legendRowBottom}>
         <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
         <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
-        <IconLegend color={colors.period} Icon={Droplet} label="经期" />
-        <IconLegend color={colors.secondary} Icon={Moon} label="经前期" />
-        <IconLegend color={colors.primary} Icon={CircleDot} label="排卵日" />
-        <IconLegend color={colors.green} Icon={Activity} label="易孕期" />
-        <IconLegend color={colors.gold} Icon={CalendarDays} label="预测" />
+        <IconLegend color="#ff7043" Icon={Droplet} label="经期" />
+        <IconLegend color="#ffd4e4" Icon={Activity} label="易孕" />
       </View>
     </View>
   );
@@ -2368,33 +2377,28 @@ function CalendarDay({
 }) {
   const key = toDateKey(date);
   const markers = getMarkersForDay(date, state, cycleInfo);
-  const isPeriodDay = Boolean(findPeriodForDate(state, date));
-  const sexCount = state.sexRecords
-    .filter((record) => toDateKey(new Date(record.dateTime)) === key)
-    .reduce((sum, record) => sum + Number(record.count || 1), 0);
-  const note = getCalendarNote(sexCount, markers);
+  const tone = getCalendarTone(date, state, cycleInfo);
+  const lunar = lunarDayLabel(date);
   const isToday = key === toDateKey(new Date());
   const outside = date.getMonth() !== visibleMonth.getMonth();
+  const eventMarker = markers[0];
   return (
-    <Pressable style={[styles.calendarDay, outside && styles.calendarDayOutside, isToday && styles.calendarDayToday, selected && styles.calendarDaySelected]} onPress={onPress}>
-      {selected ? (
-        <LinearGradient colors={colors.avatarGradient} style={styles.calendarDayActiveFill}>
-          <Text style={[styles.calendarDayNumber, styles.calendarDayNumberActive]}>{date.getDate()}</Text>
-          <Text style={[styles.calendarDayNote, styles.calendarDayNoteActive]}>{state.settings.privacyMode ? '' : note}</Text>
-        </LinearGradient>
-      ) : (
-        <>
-          <Text style={[styles.calendarDayNumber, isPeriodDay && styles.calendarDayNumberPeriod]}>{date.getDate()}</Text>
-          <Text style={styles.calendarDayNote}>{state.settings.privacyMode ? '' : note}</Text>
-        </>
-      )}
-      {markers.length > 0 && (
-        <View style={styles.calendarDayMarkerRow}>
-          {markers.slice(0, 1).map((marker) => (
-            <View key={marker} style={[styles.calendarDayMarkerDot, markerStyle(marker), selected && styles.calendarDayMarkerDotActive]} />
-          ))}
-        </View>
-      )}
+    <Pressable
+      style={[
+        styles.calendarDay,
+        tone === 'period' && styles.calendarDayPeriod,
+        tone === 'fertile' && styles.calendarDayFertile,
+        outside && styles.calendarDayOutside,
+        isToday && styles.calendarDayToday,
+        selected && styles.calendarDaySelected,
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[styles.calendarDayNumber, tone === 'period' && styles.calendarDayNumberOnTone]}>{date.getDate()}</Text>
+      <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{state.settings.privacyMode ? '' : lunar}</Text>
+      <View style={styles.calendarDayMarkerSlot}>
+        {eventMarker && <View style={[styles.calendarDayMarkerDot, markerStyle(eventMarker)]} />}
+      </View>
     </Pressable>
   );
 }
@@ -3467,22 +3471,20 @@ function buildCalendarDays(visibleMonth: Date) {
   return Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
 }
 
-function getMarkersForDay(date: Date, state: AppState, info: CycleInfo) {
+function getMarkersForDay(date: Date, state: AppState, _info: CycleInfo) {
   const key = toDateKey(date);
   const sexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === key);
   if (sexRecords.some((record) => !isSoloSexRecord(record))) return ['partnered-sex'];
   if (sexRecords.some((record) => isSoloSexRecord(record))) return ['solo-sex'];
-
-  if (!info) return [];
-  const day = startOfDay(date);
-  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
-  const pmsStart = addDays(info.nextPeriod, -5);
-  const pmsEnd = addDays(info.nextPeriod, -1);
-  if (toDateKey(day) === toDateKey(info.ovulation)) return ['ovulation'];
-  if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) return ['fertile'];
-  if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) return ['predicted'];
-  if (day >= startOfDay(pmsStart) && day <= startOfDay(pmsEnd)) return ['pms'];
   return [];
+}
+
+function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period' | 'fertile' | null {
+  if (findPeriodForDate(state, date)) return 'period';
+  if (!info) return null;
+  const day = startOfDay(date);
+  if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) return 'fertile';
+  return null;
 }
 
 function findPeriodForDate(state: AppState, date: Date) {
@@ -3585,26 +3587,11 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
   };
 }
 
-function getCalendarNote(sexCount: number, markers: string[]) {
-  if (sexCount) return `${sexCount}次`;
-  if (markers.includes('period')) return '经期';
-  if (markers.includes('predicted')) return '预测';
-  if (markers.includes('ovulation')) return '排卵';
-  if (markers.includes('fertile')) return '易孕';
-  if (markers.includes('pms')) return '经前';
-  return '';
-}
-
 function markerStyle(marker: string) {
   if (marker === 'partnered-sex') return { backgroundColor: colors.sex };
   if (marker === 'solo-sex') return { backgroundColor: colors.primary };
-  if (marker === 'period') return { backgroundColor: colors.period };
-  if (marker === 'pms') return { backgroundColor: colors.secondary };
-  if (marker === 'ovulation') return { backgroundColor: colors.primary };
-  if (marker === 'fertile') return { backgroundColor: colors.green };
-  return { backgroundColor: colors.gold };
+  return { backgroundColor: colors.sex };
 }
-
 function buildSexChart(state: AppState, range: 'week' | 'month' | 'year') {
   if (range === 'week') {
     const start = addDays(startOfDay(new Date()), -6);
@@ -3804,7 +3791,7 @@ function createStyles(theme: ThemePalette) {
     justifyContent: 'space-between',
     gap: 16,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? 34 : 20,
+    paddingTop: Platform.OS === 'android' ? 46 : 32,
     paddingBottom: 18,
   },
   greeting: {
@@ -4393,64 +4380,60 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingTop: 5,
+    paddingBottom: 4,
     backgroundColor: colors.soft,
+    borderWidth: 1,
+    borderColor: 'transparent',
     overflow: 'hidden',
+  },
+  calendarDayPeriod: {
+    backgroundColor: '#ff7043',
+  },
+  calendarDayFertile: {
+    backgroundColor: '#ffd4e4',
   },
   calendarDayOutside: {
     opacity: 0.34,
   },
   calendarDayToday: {
-    borderWidth: 1,
     borderColor: colors.primaryLight,
-    backgroundColor: '#fff',
   },
   calendarDaySelected: {
-    backgroundColor: 'transparent',
-  },
-  calendarDayActiveFill: {
-    position: 'absolute',
-    inset: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.primary,
+    borderWidth: 2,
   },
   calendarDayNumber: {
     color: colors.text,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '900',
+    lineHeight: 17,
   },
-  calendarDayNumberPeriod: {
-    color: colors.period,
-  },
-  calendarDayNumberActive: {
+  calendarDayNumberOnTone: {
     color: '#fff',
   },
-  calendarDayNote: {
-    maxWidth: '92%',
-    marginTop: 1,
+  calendarDayLunar: {
+    maxWidth: '94%',
+    minHeight: 12,
     color: colors.sub,
     fontSize: 8,
     fontWeight: '800',
-    lineHeight: 11,
-    overflow: 'hidden',
+    lineHeight: 10,
+    textAlign: 'center',
   },
-  calendarDayNoteActive: {
-    color: 'rgba(255,255,255,0.82)',
+  calendarDayLunarOnTone: {
+    color: 'rgba(255,255,255,0.86)',
   },
-  calendarDayMarkerRow: {
-    position: 'absolute',
-    right: 5,
-    bottom: 5,
-    flexDirection: 'row',
-    gap: 2,
+  calendarDayMarkerSlot: {
+    height: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
   },
   calendarDayMarkerDot: {
     width: 5,
     height: 5,
     borderRadius: 999,
-  },
-  calendarDayMarkerDotActive: {
-    borderWidth: 1,
-    borderColor: '#fff',
   },
   panel: {
     borderRadius: 26,
@@ -4860,7 +4843,7 @@ function createStyles(theme: ThemePalette) {
     justifyContent: 'space-between',
     gap: 14,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? 34 : 20,
+    paddingTop: Platform.OS === 'android' ? 46 : 32,
     paddingBottom: 16,
   },
   aboutHeaderCopy: {
