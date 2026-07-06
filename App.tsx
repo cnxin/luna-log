@@ -3584,8 +3584,17 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
     };
   }
 
-  const cycleDay = ((daysBetween(info.start, day) % info.cycleLength) + info.cycleLength) % info.cycleLength + 1;
   const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  if (day < startOfDay(info.start) || day > startOfDay(predictedEnd)) {
+    return {
+      title: '暂无周期状态',
+      detail: '这一天不在当前周期预测范围内。若需要校正，可标记当天经期开始。',
+      Icon: CalendarDays,
+      colors: [colors.primary, colors.primaryLight],
+    };
+  }
+
+  const cycleDay = daysBetween(info.start, day) + 1;
   const pmsStart = addDays(info.nextPeriod, -5);
   const pmsEnd = addDays(info.nextPeriod, -1);
 
