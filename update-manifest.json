@@ -3,6 +3,7 @@
   "releaseDate": "2026-07-04",
   "title": "Luna Log mobile demo",
   "highlights": [
+    "修复 Android 实机首页经期卡片渐变背景裁切异常",
     "完成手机壳预览、首页、日历、统计和设置四个主界面",
     "做爱和自慰拆分为独立入口，并补充 Aphrodite 风格的记录项",
     "日历支持经期、易孕期和亲密记录标记，统计支持周/月/年查看",
@@ -11,6 +12,6 @@
   ],
   "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.0/luna-log-v1.0.0-release.apk",
   "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.0",
-  "fileSize": 76476135,
+  "fileSize": 76476411,
   "mandatory": false
 }
