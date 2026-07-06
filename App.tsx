@@ -2445,6 +2445,7 @@ function CalendarDay({
       style={[
         styles.calendarDay,
         tone === 'period' && styles.calendarDayPeriod,
+        tone === 'predictedPeriod' && styles.calendarDayPredictedPeriod,
         tone === 'fertile' && styles.calendarDayFertile,
         outside && styles.calendarDayOutside,
         isToday && styles.calendarDayToday,
@@ -3537,10 +3538,12 @@ function getMarkersForDay(date: Date, state: AppState, _info: CycleInfo) {
   return [];
 }
 
-function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period' | 'fertile' | null {
+function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period' | 'predictedPeriod' | 'fertile' | null {
   if (findPeriodForDate(state, date)) return 'period';
   if (!info) return null;
   const day = startOfDay(date);
+  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) return 'predictedPeriod';
   if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) return 'fertile';
   return null;
 }
@@ -4447,6 +4450,9 @@ function createStyles(theme: ThemePalette) {
   },
   calendarDayPeriod: {
     backgroundColor: '#ff7043',
+  },
+  calendarDayPredictedPeriod: {
+    backgroundColor: '#ffb199',
   },
   calendarDayFertile: {
     backgroundColor: '#ffd4e4',
