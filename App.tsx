@@ -187,7 +187,7 @@ type AppUpdateInfo = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const UPDATE_SOURCES: UpdateSource[] = [
   {
@@ -203,7 +203,7 @@ const UPDATE_SOURCES: UpdateSource[] = [
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: '1.0.0',
+    version: '1.0.1',
     date: '2026-07-04',
     title: '移动端 Demo 和记录体验',
     highlights: [
@@ -2454,22 +2454,21 @@ type IconName =
   | 'moodHappy'
   | 'moodJoy';
 
-// 抽象小人：圆头 + 椭圆身，dir 控制横躺/竖立
-function Figure({ x, y, dir, fill }: { x: number; y: number; dir: 'h' | 'v'; fill: string }) {
-  if (dir === 'h') {
-    return (
-      <G>
-        <Circle cx={x - 5.5} cy={y} r={3} fill={fill} />
-        <Ellipse cx={x + 1.5} cy={y} rx={5.5} ry={3} fill={fill} />
-      </G>
-    );
-  }
-  return (
-    <G>
-      <Circle cx={x} cy={y - 5.5} r={3} fill={fill} />
-      <Ellipse cx={x} cy={y + 1.5} rx={3} ry={5.5} fill={fill} />
-    </G>
-  );
+function PoseBody({ x, y, angle = 0, fill, variant = 'stand' }: { x: number; y: number; angle?: number; fill: string; variant?: 'stand' | 'lie' | 'kneel' | 'sit' }) {
+  const body =
+    variant === 'lie'
+      ? <Ellipse cx={x + 3} cy={y} rx={6.2} ry={3.2} fill={fill} />
+      : variant === 'kneel'
+        ? <Path d={`M${x - 3} ${y - 2} Q${x + 2} ${y - 6} ${x + 5} ${y - 1} L${x + 2} ${y + 6} Q${x - 4} ${y + 7} ${x - 5} ${y + 1} Z`} fill={fill} />
+        : variant === 'sit'
+          ? <Path d={`M${x - 4} ${y - 4} Q${x + 4} ${y - 8} ${x + 6} ${y + 1} Q${x + 2} ${y + 8} ${x - 5} ${y + 5} Z`} fill={fill} />
+          : <Ellipse cx={x} cy={y + 2} rx={3.4} ry={7} fill={fill} />;
+  const head = variant === 'lie' ? <Circle cx={x - 5.5} cy={y - 0.3} r={2.8} fill={fill} /> : <Circle cx={x} cy={y - 6.6} r={2.8} fill={fill} />;
+  return <G transform={`rotate(${angle} ${x} ${y})`}>{head}{body}</G>;
+}
+
+function PoseBase({ y = 25 }: { y?: number }) {
+  return <Line x1={6} y1={y} x2={26} y2={y} stroke="rgba(74,67,104,0.18)" strokeWidth={2.1} strokeLinecap="round" />;
 }
 
 function CartoonIcon({ name, size = 27, active = false, color }: { name: IconName; size?: number; active?: boolean; color?: string }) {
@@ -2539,50 +2538,63 @@ function CartoonIcon({ name, size = 27, active = false, color }: { name: IconNam
     case 'sideLying':
       return svg(
         <>
-          <Figure x={18} y={13} dir="h" fill={soft} />
-          <Figure x={15} y={19} dir="h" fill={main} />
+          <PoseBase y={24.5} />
+          <PoseBody x={17.6} y={13.4} variant="lie" fill={soft} angle={-4} />
+          <PoseBody x={14.6} y={19.4} variant="lie" fill={main} angle={3} />
+          <Path d="M8 17 Q16 14 24 17" stroke={ink} strokeWidth={1.2} fill="none" strokeLinecap="round" opacity={0.32} />
         </>
       );
     case 'prone':
       return svg(
         <>
-          <Figure x={16} y={13} dir="h" fill={soft} />
-          <Figure x={16} y={20} dir="h" fill={main} />
+          <PoseBase y={25.5} />
+          <PoseBody x={13.4} y={20.2} variant="lie" fill={main} angle={1} />
+          <PoseBody x={18.7} y={14.5} variant="lie" fill={soft} angle={-18} />
+          <Line x1={10} y1={22.8} x2={23} y2={17.8} stroke={ink} strokeWidth={1.2} strokeLinecap="round" opacity={0.28} />
         </>
       );
     case 'rear':
       return svg(
         <>
-          <Figure x={21} y={16} dir="h" fill={soft} />
-          <Figure x={13} y={16} dir="h" fill={main} />
+          <PoseBase y={25} />
+          <PoseBody x={13.2} y={18.6} variant="kneel" fill={main} angle={72} />
+          <PoseBody x={22.2} y={15.9} variant="kneel" fill={soft} angle={-62} />
+          <Line x1={13.5} y1={23.5} x2={22} y2={23.5} stroke={ink} strokeWidth={1.5} strokeLinecap="round" opacity={0.25} />
         </>
       );
     case 'cowgirl':
       return svg(
         <>
-          <Figure x={16} y={22} dir="h" fill={soft} />
-          <Figure x={16} y={11} dir="v" fill={main} />
+          <PoseBase y={25} />
+          <PoseBody x={16.4} y={22.2} variant="lie" fill={soft} angle={0} />
+          <PoseBody x={16} y={13.2} variant="sit" fill={main} angle={0} />
+          <Line x1={12} y1={18.8} x2={20} y2={18.8} stroke={ink} strokeWidth={1.3} strokeLinecap="round" opacity={0.28} />
         </>
       );
     case 'kneel':
       return svg(
         <>
-          <Figure x={20} y={17} dir="v" fill={soft} />
-          <Figure x={12} y={17} dir="v" fill={main} />
+          <PoseBase y={25.5} />
+          <PoseBody x={11.8} y={17.8} variant="kneel" fill={main} angle={-12} />
+          <PoseBody x={21.2} y={17.8} variant="kneel" fill={soft} angle={12} />
+          <Path d="M13.5 20.5 Q16.5 18.5 19.5 20.5" stroke={ink} strokeWidth={1.25} fill="none" strokeLinecap="round" opacity={0.3} />
         </>
       );
     case 'embrace':
       return svg(
         <>
-          <Figure x={19} y={16} dir="v" fill={soft} />
-          <Figure x={13} y={16} dir="v" fill={main} />
+          <PoseBody x={12.6} y={17.8} variant="stand" fill={main} angle={-8} />
+          <PoseBody x={19.4} y={17.8} variant="stand" fill={soft} angle={8} />
+          <Path d="M11 15 Q16 20 21 15" stroke={ink} strokeWidth={1.5} fill="none" strokeLinecap="round" opacity={0.34} />
         </>
       );
     case 'standing':
       return svg(
         <>
-          <Figure x={21} y={16} dir="v" fill={soft} />
-          <Figure x={11} y={16} dir="v" fill={main} />
+          <PoseBase y={26} />
+          <PoseBody x={11.2} y={17.5} variant="stand" fill={main} angle={-5} />
+          <PoseBody x={21.2} y={17.2} variant="stand" fill={soft} angle={7} />
+          <Line x1={14.2} y1={18} x2={18.2} y2={18} stroke={ink} strokeWidth={1.4} strokeLinecap="round" opacity={0.3} />
         </>
       );
     default: {

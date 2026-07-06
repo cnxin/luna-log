@@ -1,17 +1,15 @@
 {
-  "version": "1.0.0",
-  "releaseDate": "2026-07-04",
-  "title": "Luna Log mobile demo",
+  "version": "1.0.1",
+  "releaseDate": "2026-07-06",
+  "title": "Luna Log icon and Android polish",
   "highlights": [
+    "升级应用图标，统一月牙、周期轨道和水滴视觉符号",
+    "重绘做爱姿势图标，提高姿势区分度和整体圆润感",
     "修复 Android 实机首页经期卡片渐变背景裁切异常",
-    "完成手机壳预览、首页、日历、统计和设置四个主界面",
-    "做爱和自慰拆分为独立入口，并补充 Aphrodite 风格的记录项",
-    "日历支持经期、易孕期和亲密记录标记，统计支持周/月/年查看",
-    "加入原版、薄荷、蓝色三套 LifeLog 风格视觉主题",
-    "新增关于界面的更新检查、版本说明和来源诊断"
+    "更新 Android versionCode 到 2，支持从 1.0.0 正常升级安装"
   ],
-  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.0/luna-log-v1.0.0-release.apk",
-  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.0",
-  "fileSize": 76476411,
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.1/luna-log-v1.0.1-release.apk",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.1",
+  "fileSize": 76376463,
   "mandatory": false
 }
