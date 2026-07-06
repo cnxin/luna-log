@@ -39,6 +39,7 @@ import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -191,7 +192,7 @@ type AppUpdateInfo = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.0.3';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const UPDATE_SOURCES: UpdateSource[] = [
   {
@@ -207,6 +208,16 @@ const UPDATE_SOURCES: UpdateSource[] = [
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.0.3',
+    date: '2026-07-06',
+    title: '图标素材和记录体验优化',
+    highlights: [
+      '日历新增按选中日期快速添加做爱和自慰记录',
+      '保护措施改为单选，并使用 Aphrodite 风格截图图标',
+      '姿势、自慰道具和心情图标统一尺寸与视觉风格',
+      '更新 Android versionCode 到 4，支持从 1.0.2 正常升级安装',
+    ],
+  },  {
     version: '1.0.2',
     date: '2026-07-06',
     title: '数据备份、内置更新和体验优化',
@@ -1058,6 +1069,7 @@ export default function App() {
                   onMonthChange={setVisibleMonth}
                   onSelectDate={(date) => setSelectedCalendarDate(toDateKey(date))}
                   onPatch={(updater) => patchState(updater)}
+                  onAddEntry={openSheet}
                   onEditSex={openSexEditor}
                 />
               )}
@@ -1125,6 +1137,7 @@ export default function App() {
             <EntrySheet
               type={sheetType}
               state={state}
+              initialDateKey={screen === 'calendar' ? selectedCalendarDate || toDateKey(new Date()) : null}
               editingSexRecord={editingSexRecord}
               editingPeriodRecord={editingPeriodRecord}
               editingSymptomRecord={editingSymptomRecord}
@@ -1305,6 +1318,7 @@ function CalendarScreen({
   onMonthChange,
   onSelectDate,
   onPatch,
+  onAddEntry,
   onEditSex,
 }: {
   state: AppState;
@@ -1314,6 +1328,7 @@ function CalendarScreen({
   onMonthChange: (date: Date) => void;
   onSelectDate: (date: Date) => void;
   onPatch: (updater: (current: AppState) => AppState) => void;
+  onAddEntry: (type: Extract<SheetType, 'partneredSex' | 'soloSex'>) => void;
   onEditSex: (record: SexRecord) => void;
 }) {
   const days = buildCalendarDays(visibleMonth);
@@ -1452,6 +1467,16 @@ function CalendarScreen({
           ) : (
             <Text style={styles.daySexEmpty}>这一天还没有性生活记录</Text>
           )}
+          <View style={styles.daySexQuickActions}>
+            <Pressable style={[styles.daySexQuickButton, styles.daySexQuickButtonPrimary]} onPress={() => onAddEntry('partneredSex')}>
+              <HeartHandshake color="#fff" size={15} strokeWidth={2.7} />
+              <Text style={[styles.daySexQuickButtonText, styles.daySexQuickButtonTextPrimary]}>添加做爱</Text>
+            </Pressable>
+            <Pressable style={styles.daySexQuickButton} onPress={() => onAddEntry('soloSex')}>
+              <Sparkles color={colors.primary} size={15} strokeWidth={2.7} />
+              <Text style={styles.daySexQuickButtonText}>添加自慰</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -1934,6 +1959,7 @@ function UpdateMeta({ label, value }: { label: string; value: string }) {
 function EntrySheet({
   state,
   type,
+  initialDateKey,
   editingSexRecord,
   editingPeriodRecord,
   editingSymptomRecord,
@@ -1944,6 +1970,7 @@ function EntrySheet({
 }: {
   state: AppState;
   type: SheetType | null;
+  initialDateKey?: string | null;
   editingSexRecord?: SexRecord | null;
   editingPeriodRecord?: PeriodRecord | null;
   editingSymptomRecord?: SymptomRecord | null;
@@ -2030,7 +2057,7 @@ function EntrySheet({
       return;
     }
 
-    setDate(toDateKey(new Date()));
+    setDate(initialDateKey || toDateKey(new Date()));
     setTime('12:00');
     setCount('1');
     setDuration('');
@@ -2085,7 +2112,7 @@ function EntrySheet({
         setPrefillUsed(Boolean(latestSymptom.symptoms?.length));
       }
     }
-  }, [type, editingSexRecord, editingPeriodRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.symptomRecords]);
+  }, [type, initialDateKey, editingSexRecord, editingPeriodRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.symptomRecords]);
 
   function toggleSymptom(value: string) {
     setSymptoms((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
@@ -2096,7 +2123,7 @@ function EntrySheet({
   }
 
   function toggleProtection(value: string) {
-    setProtectionMethods((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
+    setProtectionMethods([value]);
   }
 
   function togglePosition(value: string) {
@@ -2215,7 +2242,7 @@ function EntrySheet({
             )}
             {sexMode === 'partneredSex' && (
               <OptionSection label="姿势">
-                <MiniChoiceRail options={['侧躺', '后入', '骑乘', '跪姿', '拥抱', '站立', '俯卧']} selected={positions} onToggle={togglePosition} />
+                <MiniChoiceRail options={['侧躺', '后入', '骑乘', '跪姿', '拥抱', '俯卧']} selected={positions} onToggle={togglePosition} />
               </OptionSection>
             )}
             {sexMode === 'partneredSex' && (
@@ -2660,6 +2687,14 @@ function SelectOption({ label, value, onPress }: { label: string; value: string;
 }
 
 
+const choiceImageMap: Partial<Record<IconName, number>> = {
+  noProtect: require('./assets/protection/no-protect.png'),
+  condom: require('./assets/protection/condom.png'),
+  pill: require('./assets/protection/pill.png'),
+  cup: require('./assets/toys/cup.png'),
+  wand: require('./assets/toys/wand.png'),
+};
+
 function IconChoiceGrid({
   options,
   selected,
@@ -2673,10 +2708,25 @@ function IconChoiceGrid({
     <View style={styles.iconChoiceGrid}>
       {options.map((option) => {
         const active = selected.includes(option.label);
+        const imageSource = choiceImageMap[option.icon];
+        const isProtectionIcon = option.icon === 'noProtect' || option.icon === 'condom' || option.icon === 'pill';
         return (
           <Pressable key={option.label} style={styles.iconChoiceItem} onPress={() => onToggle(option.label)}>
-            <View style={[styles.aphroditeIconBubble, active && styles.aphroditeIconBubbleActive]}>
-              <CartoonIcon name={option.icon} active={active} size={30} />
+            <View style={[styles.aphroditeIconBubble, isProtectionIcon && styles.aphroditeIconBubbleImageOnly, active && styles.aphroditeIconBubbleActive, active && isProtectionIcon && styles.aphroditeIconBubbleImageOnlyActive]}>
+              {imageSource ? (
+                <Image
+                  source={imageSource}
+                  style={[
+                    styles.choiceIconImage,
+                    (option.icon === 'noProtect' || option.icon === 'condom' || option.icon === 'pill') && styles.choiceIconImageProtection,
+                    option.icon === 'cup' && styles.choiceIconImageCup,
+                    option.icon === 'wand' && styles.choiceIconImageWand,
+                  ]}
+                  resizeMode="contain"
+                />
+              ) : (
+                <CartoonIcon name={option.icon} active={active} size={42} />
+              )}
             </View>
             <Text style={[styles.iconChoiceLabel, active && styles.iconChoiceLabelActive]}>{option.label}</Text>
           </Pressable>
@@ -2692,8 +2742,16 @@ const positionIconMap: Record<string, IconName> = {
   骑乘: 'cowgirl',
   跪姿: 'kneel',
   拥抱: 'embrace',
-  站立: 'standing',
   俯卧: 'prone',
+};
+
+const positionImageMap: Record<string, number> = {
+  侧躺: require('./assets/positions/side-lying.png'),
+  后入: require('./assets/positions/rear.png'),
+  骑乘: require('./assets/positions/cowgirl.png'),
+  跪姿: require('./assets/positions/kneel.png'),
+  拥抱: require('./assets/positions/embrace.png'),
+  俯卧: require('./assets/positions/prone.png'),
 };
 
 function MiniChoiceRail({ options, selected, onToggle }: { options: string[]; selected: string[]; onToggle: (value: string) => void }) {
@@ -2704,7 +2762,7 @@ function MiniChoiceRail({ options, selected, onToggle }: { options: string[]; se
         return (
           <Pressable key={option} style={[styles.miniChoice, active && styles.miniChoiceActive]} onPress={() => onToggle(option)}>
             <View style={[styles.positionIconBubble, active && styles.positionIconBubbleActive]}>
-              <CartoonIcon name={positionIconMap[option] || 'embrace'} active={active} size={38} />
+              <Image source={positionImageMap[option]} style={styles.positionIconImage} resizeMode="contain" />
             </View>
             <Text style={[styles.miniChoiceText, active && styles.miniChoiceTextActive]}>{option}</Text>
           </Pressable>
@@ -2756,7 +2814,7 @@ function MoodPicker({ value, onChange }: { value: string; onChange: (value: stri
         return (
           <Pressable key={option.label} style={styles.moodButton} onPress={() => onChange(option.label)}>
             <View style={[styles.moodFace, active && styles.moodFaceActive]}>
-              <CartoonIcon name={option.name} color={option.color} size={46} />
+              <CartoonIcon name={option.name} color={option.color} size={44} />
             </View>
             <Text style={[styles.moodLabel, active && styles.moodLabelActive]}>{option.label}</Text>
           </Pressable>
@@ -2786,28 +2844,23 @@ type IconName =
   | 'moodHappy'
   | 'moodJoy';
 
-function PosePerson({ x, y, scale = 1, rotate = 0, flip = false, stroke }: { x: number; y: number; scale?: number; rotate?: number; flip?: boolean; stroke: string }) {
-  const mirror = flip ? -1 : 1;
-  return (
-    <G transform={`translate(${x} ${y}) rotate(${rotate}) scale(${mirror * scale} ${scale})`}>
-      <Circle cx={0} cy={-8} r={2.5} fill={stroke} />
-      <Path d="M0 -5 L0 2" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
-      <Path d="M0 -2 L-5 1" stroke={stroke} strokeWidth={2.6} strokeLinecap="round" fill="none" />
-      <Path d="M0 -1 L5 2" stroke={stroke} strokeWidth={2.6} strokeLinecap="round" fill="none" />
-      <Path d="M0 2 L-5 8" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
-      <Path d="M0 2 L6 7" stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
-    </G>
-  );
+function AphroLine({ d, stroke, width = 2.35, opacity = 1 }: { d: string; stroke: string; width?: number; opacity?: number }) {
+  return <Path d={d} stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" opacity={opacity} fill="none" />;
 }
 
-function PoseCurve({ d, stroke, width = 2.4 }: { d: string; stroke: string; width?: number }) {
-  return <Path d={d} stroke={stroke} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" fill="none" />;
+function AphroHead({ cx, cy, fill, r = 2.25 }: { cx: number; cy: number; fill: string; r?: number }) {
+  return <Circle cx={cx} cy={cy} r={r} fill={fill} />;
+}
+
+function AphroBase({ stroke }: { stroke: string }) {
+  return <Path d="M7 25.2 H25" stroke={stroke} strokeWidth={2.1} strokeLinecap="round" opacity={0.16} fill="none" />;
 }
 
 function CartoonIcon({ name, size = 27, active = false, color }: { name: IconName; size?: number; active?: boolean; color?: string }) {
-  const main = active ? colors.primary : '#7d70b0';
-  const soft = active ? colors.primaryLight : '#cdc4e8';
+  const main = active ? colors.primary : '#806fa8';
+  const soft = active ? colors.primaryLight : '#f3d9e8';
   const ink = '#4a4368';
+  const accent = active ? colors.sex : '#f08eaa';
 
   const svg = (children: ReactNode) => (
     <Svg width={size} height={size} viewBox="0 0 32 32">
@@ -2816,17 +2869,22 @@ function CartoonIcon({ name, size = 27, active = false, color }: { name: IconNam
   );
 
   switch (name) {
-    case 'hand':
+    case 'hand': {
+      const handFill = active ? colors.primaryLight : '#ffd2de';
+      const handStroke = active ? colors.primary : '#9a6f8f';
+      const palmFill = active ? colors.primary : '#f08eaa';
       return svg(
         <>
-          <Rect x={9} y={14} width={14} height={12} rx={5} fill={main} />
-          <Rect x={10} y={7} width={2.6} height={10} rx={1.3} fill={soft} />
-          <Rect x={13.3} y={5.5} width={2.6} height={11.5} rx={1.3} fill={soft} />
-          <Rect x={16.6} y={6} width={2.6} height={11} rx={1.3} fill={soft} />
-          <Rect x={19.8} y={8} width={2.6} height={9} rx={1.3} fill={soft} />
-          <Rect x={5.4} y={15.6} width={6} height={2.8} rx={1.4} fill={soft} transform="rotate(42 8 17)" />
+          <Path d="M10.4 14.7 V8.8 C10.4 7.7 11.2 6.9 12.2 6.9 C13.2 6.9 14 7.7 14 8.8 V13.9" fill={handFill} />
+          <Path d="M14 13.8 V7.4 C14 6.3 14.8 5.5 15.8 5.5 C16.9 5.5 17.7 6.3 17.7 7.4 V13.7" fill={handFill} />
+          <Path d="M17.7 13.8 V8.1 C17.7 7.1 18.5 6.3 19.5 6.3 C20.5 6.3 21.3 7.1 21.3 8.1 V14.4" fill={handFill} />
+          <Path d="M21.3 15.1 V10.6 C21.3 9.7 22 9 22.9 9 C23.8 9 24.5 9.7 24.5 10.6 V18.5 C24.5 23.5 21.2 26.8 16.6 26.8 H15.1 C11.1 26.8 8.2 24.2 7.2 20.6 L6.4 17.6 C6.1 16.5 6.8 15.5 7.9 15.3 C8.8 15.1 9.5 15.6 10 16.4 L11.1 18.1 V14.7 Z" fill={palmFill} />
+          <Path d="M10.4 14.7 V8.8 C10.4 7.7 11.2 6.9 12.2 6.9 C13.2 6.9 14 7.7 14 8.8 V13.9 M14 13.8 V7.4 C14 6.3 14.8 5.5 15.8 5.5 C16.9 5.5 17.7 6.3 17.7 7.4 V13.7 M17.7 13.8 V8.1 C17.7 7.1 18.5 6.3 19.5 6.3 C20.5 6.3 21.3 7.1 21.3 8.1 V14.4 M21.3 15.1 V10.6 C21.3 9.7 22 9 22.9 9 C23.8 9 24.5 9.7 24.5 10.6 V18.5 C24.5 23.5 21.2 26.8 16.6 26.8 H15.1 C11.1 26.8 8.2 24.2 7.2 20.6 L6.4 17.6 C6.1 16.5 6.8 15.5 7.9 15.3 C8.8 15.1 9.5 15.6 10 16.4 L11.1 18.1" stroke={handStroke} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          <Path d="M13.9 15.1 V19.2 M17.5 15 V19.2 M21.1 15.8 V19.1" stroke="#fff" strokeWidth={1.2} strokeLinecap="round" opacity={0.62} />
+          <Path d="M10.8 21.8 C13.4 23.4 18.7 23.7 21.7 21.3" stroke="#fff" strokeWidth={1.25} strokeLinecap="round" opacity={0.42} />
         </>
       );
+    }
     case 'cup':
       return svg(
         <>
@@ -2847,84 +2905,118 @@ function CartoonIcon({ name, size = 27, active = false, color }: { name: IconNam
     case 'noProtect':
       return svg(
         <>
-          <Path d="M16 4 L26 8 V15 C26 21 21 26 16 28 C11 26 6 21 6 15 V8 Z" fill={soft} />
-          <Line x1={9} y1={9} x2={23} y2={24} stroke={main} strokeWidth={3.2} strokeLinecap="round" />
+          <Path d="M7.2 21.6 C12.8 24.6 21.4 20.9 25.6 11.3 C23.3 20.8 14.5 28.5 6.2 24.8 C4.8 24.2 5.8 20.8 7.2 21.6 Z" fill="#ffd84d" />
+          <Path d="M8 21.9 C13.8 24.1 20.4 20.6 23.7 13.2" stroke="#f7a516" strokeWidth={2.1} strokeLinecap="round" fill="none" />
+          <Path d="M5.7 23.4 C6.8 23.2 7.9 23.8 8.3 24.9 C7.1 25.5 5.7 25 5.2 24 Z" fill="#7c4a19" />
+          <Path d="M24.6 10.3 C25.9 9.8 27 10.1 27.7 11.1 C26.9 12.1 25.7 12.6 24.7 12.1 Z" fill="#68b75d" />
+          <Circle cx={18.6} cy={19.6} r={1.4} fill={accent} opacity={0.85} />
         </>
       );
     case 'condom':
       return svg(
         <>
-          <Rect x={6} y={8} width={20} height={16} rx={3} fill={soft} />
-          <Circle cx={16} cy={16} r={5.4} fill={main} />
-          <Circle cx={16} cy={16} r={2.4} fill={soft} />
+          <Path d="M7.1 22 C12.6 24.8 20.9 21.4 25 12.4 C22.9 21.4 14.3 28.3 6.4 24.7 C5 24.1 5.7 21.3 7.1 22 Z" fill="#ffd84d" />
+          <Path d="M15.8 21.8 C20.1 19.8 23.1 16.4 25.3 11.8" stroke="#f7a516" strokeWidth={2} strokeLinecap="round" fill="none" />
+          <Path d="M20.4 16.3 C22.5 14.1 23.7 12.1 24.5 9.7 C26.5 10.2 27.5 11.5 27.4 13.2 C26.4 15.2 24.7 17.4 22.4 19.2 Z" fill="#8ed8ff" />
+          <Path d="M20.4 16.3 C22.6 16.4 24.6 17.5 25.6 19.1" stroke="#0f77d8" strokeWidth={1.8} strokeLinecap="round" fill="none" opacity={0.9} />
+          <Path d="M5.7 23.5 C6.8 23.2 7.9 23.8 8.3 24.9 C7.1 25.5 5.7 25 5.2 24 Z" fill="#7c4a19" />
         </>
       );
     case 'pill':
       return svg(
         <>
-          <Rect x={6} y={6} width={20} height={20} rx={4} fill={soft} />
-          {[11, 21].map((cx) =>
-            [11, 16, 21].map((cy) => <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={2.4} fill={main} />)
-          )}
+          <Rect x={6.4} y={7} width={19.2} height={18.5} rx={5.2} fill="#fff" stroke={main} strokeWidth={2.3} />
+          <Line x1={16} y1={8.9} x2={16} y2={23.6} stroke={main} strokeWidth={1.5} strokeLinecap="round" opacity={0.45} />
+          <Circle cx={11.2} cy={12.3} r={2.15} fill={accent} />
+          <Circle cx={20.8} cy={12.3} r={2.15} fill={accent} />
+          <Circle cx={11.2} cy={20.1} r={2.15} fill={main} />
+          <Circle cx={20.8} cy={20.1} r={2.15} fill={main} />
+          <G transform="translate(16 16.2) rotate(-35)">
+            <Rect x={-5.3} y={-2.35} width={10.6} height={4.7} rx={2.35} fill="#ff8fb1" />
+            <Path d="M0 -2.1 V2.1" stroke="#fff" strokeWidth={1.25} strokeLinecap="round" />
+          </G>
         </>
-      );
-    case 'sideLying':
+      );    case 'sideLying':
       return svg(
         <>
-          <PoseCurve d="M6 22 C11 17 20 17 26 22" stroke={main} width={3.2} />
-          <Circle cx={8} cy={21.3} r={2.4} fill={main} />
-          <Circle cx={24} cy={21.3} r={2.4} fill={main} />
-          <PoseCurve d="M10 22 L15 18 L21 22" stroke={main} />
+          <AphroBase stroke={main} />
+          <AphroHead cx={9.2} cy={19.9} fill={main} />
+          <AphroLine d="M11.7 20.5 C15.2 17.7 21.3 18.1 24.5 21" stroke={main} width={3.15} />
+          <AphroLine d="M12 23.1 C16.1 24.2 20.9 24 25.1 22.7" stroke={main} width={2.35} opacity={0.82} />
+          <AphroHead cx={23.3} cy={17.4} fill={accent} />
+          <AphroLine d="M21.2 18.9 C17.9 18 14.7 18.8 12.1 21.4" stroke={accent} width={2.45} />
         </>
       );
     case 'prone':
       return svg(
         <>
-          <PoseCurve d="M5.5 22 H26.5" stroke={main} width={3.3} />
-          <Circle cx={8} cy={19} r={2.4} fill={main} />
-          <Circle cx={24} cy={19} r={2.4} fill={main} />
-          <PoseCurve d="M11 22 C15 17 19 17 23 22" stroke={main} />
+          <AphroBase stroke={main} />
+          <AphroHead cx={8.5} cy={20.2} fill={main} />
+          <AphroLine d="M11 21.1 C15.2 19.5 21.4 19.7 25 21.4" stroke={main} width={3.2} />
+          <AphroLine d="M13.5 23.6 H25" stroke={main} width={2.35} opacity={0.82} />
+          <AphroHead cx={21.8} cy={14.9} fill={accent} />
+          <AphroLine d="M20.2 17.1 C17.4 16.4 14.8 17.2 12.6 19.8" stroke={accent} width={2.55} />
+          <AphroLine d="M18.1 20.4 L23.2 23" stroke={accent} width={2.15} opacity={0.8} />
         </>
       );
     case 'rear':
       return svg(
         <>
-          <PosePerson x={10.5} y={19} scale={0.68} rotate={70} stroke={main} />
-          <PosePerson x={22.2} y={17.5} scale={0.68} rotate={-32} flip stroke={main} />
-          <PoseCurve d="M10 25 H24" stroke={main} width={2.6} />
+          <AphroBase stroke={main} />
+          <AphroHead cx={9.4} cy={17.1} fill={main} />
+          <AphroLine d="M11.5 18.5 C14.2 18.4 16.7 20.2 18.2 23" stroke={main} width={3.05} />
+          <AphroLine d="M12.4 23.2 H20" stroke={main} width={2.35} />
+          <AphroHead cx={22.5} cy={12.8} fill={accent} />
+          <AphroLine d="M21.1 15.2 C19.1 17.5 18.7 20 19.6 22.8" stroke={accent} width={2.65} />
+          <AphroLine d="M18.4 17.9 L14.8 20" stroke={accent} width={2.05} opacity={0.84} />
         </>
       );
     case 'cowgirl':
       return svg(
         <>
-          <PoseCurve d="M7 23 H25" stroke={main} width={3} />
-          <Circle cx={9.5} cy={20.5} r={2.3} fill={main} />
-          <PoseCurve d="M12 23 C15 18 20 18 23 23" stroke={main} />
-          <PosePerson x={16} y={13.5} scale={0.62} rotate={0} stroke={main} />
+          <AphroBase stroke={main} />
+          <AphroHead cx={8.7} cy={21.1} fill={main} />
+          <AphroLine d="M11.2 22.1 C15.5 20.4 20.4 20.7 24.7 22.8" stroke={main} width={3.15} />
+          <AphroHead cx={16.1} cy={9.5} fill={accent} />
+          <AphroLine d="M16.1 12 C15.6 15.2 16 18.1 17.2 20.5" stroke={accent} width={2.85} />
+          <AphroLine d="M13.5 16.7 C15.6 18.2 18.5 18.2 21 16.7" stroke={accent} width={2.1} />
+          <AphroLine d="M14.3 21 L10.7 24 M18.1 21 L22.6 24" stroke={accent} width={2.05} />
         </>
       );
     case 'kneel':
       return svg(
         <>
-          <PosePerson x={10.8} y={18.8} scale={0.64} rotate={18} stroke={main} />
-          <PosePerson x={22} y={18.8} scale={0.64} rotate={-18} flip stroke={main} />
-          <PoseCurve d="M8 25 C12 23.5 20 23.5 24 25" stroke={main} width={2.6} />
+          <AphroBase stroke={main} />
+          <AphroHead cx={10.2} cy={12.8} fill={main} />
+          <AphroLine d="M11.2 15.3 C12.7 18 13.6 20.2 13.2 22.9" stroke={main} width={2.75} />
+          <AphroLine d="M10.1 22.6 C12.2 24.3 14.8 24.3 16.8 22.9" stroke={main} width={2.15} />
+          <AphroHead cx={21.8} cy={12.8} fill={accent} />
+          <AphroLine d="M20.8 15.3 C19.3 18 18.4 20.2 18.8 22.9" stroke={accent} width={2.75} />
+          <AphroLine d="M21.9 22.6 C19.8 24.3 17.2 24.3 15.2 22.9" stroke={accent} width={2.15} />
+          <AphroLine d="M13.6 16.5 C15.3 18 16.7 18 18.4 16.5" stroke={main} width={1.9} opacity={0.72} />
         </>
       );
     case 'embrace':
       return svg(
         <>
-          <PosePerson x={12.2} y={18.5} scale={0.66} rotate={-6} stroke={main} />
-          <PosePerson x={20} y={18.5} scale={0.66} rotate={6} flip stroke={main} />
-          <PoseCurve d="M10 15 C13 19 19 19 22 15" stroke={main} />
+          <AphroHead cx={12.2} cy={10.8} fill={main} />
+          <AphroHead cx={19.8} cy={10.8} fill={accent} />
+          <AphroLine d="M12.9 13.9 C12.8 17.6 13.5 21 15.2 24.2" stroke={main} width={2.75} />
+          <AphroLine d="M19.1 13.9 C19.2 17.6 18.5 21 16.8 24.2" stroke={accent} width={2.75} />
+          <AphroLine d="M10.2 15.4 C13.2 18.5 18.8 18.5 21.8 15.4" stroke={main} width={2.05} />
+          <AphroLine d="M21.8 15.7 C18.6 20.2 13.4 20.2 10.2 15.7" stroke={accent} width={1.95} opacity={0.9} />
+          <Path d="M16 13.5 C14.6 11.9 12.3 12.8 12.6 14.9 C12.9 17.1 16 18.6 16 18.6 C16 18.6 19.1 17.1 19.4 14.9 C19.7 12.8 17.4 11.9 16 13.5 Z" fill={soft} opacity={0.78} />
         </>
       );
     case 'standing':
       return svg(
         <>
-          <PosePerson x={11.5} y={18.7} scale={0.68} rotate={-4} stroke={main} />
-          <PosePerson x={21.2} y={18.5} scale={0.68} rotate={5} flip stroke={main} />
-          <PoseCurve d="M14 18 H18.5" stroke={main} width={2.2} />
+          <AphroHead cx={11.7} cy={10} fill={main} />
+          <AphroHead cx={20.3} cy={10} fill={accent} />
+          <AphroLine d="M12.1 13 C12.1 16.9 12.9 20.8 14 25" stroke={main} width={2.75} />
+          <AphroLine d="M19.9 13 C19.9 16.9 19.1 20.8 18 25" stroke={accent} width={2.75} />
+          <AphroLine d="M13.9 16.2 C15.2 17.7 16.8 17.7 18.1 16.2" stroke={main} width={2.05} />
+          <AphroLine d="M14 24.8 L11.8 27.4 M18 24.8 L20.2 27.4" stroke={main} width={1.95} opacity={0.72} />
         </>
       );
     default: {
@@ -3657,10 +3749,8 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
   };
 }
 
-function markerStyle(marker: string) {
-  if (marker === 'partnered-sex') return { backgroundColor: colors.sex };
-  if (marker === 'solo-sex') return { backgroundColor: colors.primary };
-  return { backgroundColor: colors.sex };
+function markerStyle(_marker: string) {
+  return { backgroundColor: '#2f80ed' };
 }
 function buildSexChart(state: AppState, range: 'week' | 'month' | 'year') {
   if (range === 'week') {
@@ -4391,6 +4481,35 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 12,
     lineHeight: 17,
+  },
+  daySexQuickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 2,
+  },
+  daySexQuickButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.soft,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  daySexQuickButtonPrimary: {
+    backgroundColor: '#2f80ed',
+    borderColor: '#2f80ed',
+  },
+  daySexQuickButtonText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  daySexQuickButtonTextPrimary: {
+    color: '#fff',
   },
   legendPill: {
     flexDirection: 'row',
@@ -6060,18 +6179,43 @@ function createStyles(theme: ThemePalette) {
     gap: 8,
   },
   aphroditeIconBubble: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(245,163,174,0.22)',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    backgroundColor: 'rgba(246,190,213,0.34)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(240,142,170,0.26)',
   },
   aphroditeIconBubbleActive: {
-    backgroundColor: colors.soft,
-    borderColor: colors.primary,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: colors.sex,
+  },
+  aphroditeIconBubbleImageOnly: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
+  aphroditeIconBubbleImageOnlyActive: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    transform: [{ scale: 1.04 }],
+  },
+  choiceIconImage: {
+    width: 44,
+    height: 44,
+  },
+  choiceIconImageProtection: {
+    width: 60,
+    height: 60,
+  },
+  choiceIconImageCup: {
+    width: 38,
+    height: 52,
+  },
+  choiceIconImageWand: {
+    width: 52,
+    height: 44,
   },
   aphroditeIconText: {
     fontSize: 25,
@@ -6093,28 +6237,33 @@ function createStyles(theme: ThemePalette) {
   },
   miniChoice: {
     width: 68,
-    height: 74,
-    borderRadius: 20,
+    height: 80,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    backgroundColor: colors.soft,
+    backgroundColor: 'transparent',
   },
   miniChoiceActive: {
-    backgroundColor: 'rgba(124,112,224,0.12)',
+    backgroundColor: 'transparent',
   },
   positionIconBubble: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(171,163,255,0.22)',
+    backgroundColor: 'rgba(246,190,213,0.34)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(240,142,170,0.24)',
   },
   positionIconBubbleActive: {
-    backgroundColor: 'rgba(171,163,255,0.34)',
-    borderWidth: 2,
-    borderColor: colors.primary,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderColor: colors.sex,
+  },
+  positionIconImage: {
+    width: 52,
+    height: 52,
   },
   miniChoiceText: {
     color: colors.sub,
@@ -6182,9 +6331,9 @@ function createStyles(theme: ThemePalette) {
     gap: 5,
   },
   moodFace: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
