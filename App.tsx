@@ -5740,14 +5740,6 @@ function createStyles(theme: ThemePalette) {
   miniChoiceActive: {
     backgroundColor: colors.primary,
   },
-  miniChoiceGlyph: {
-    color: colors.primary,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  miniChoiceGlyphActive: {
-    color: '#fff',
-  },
   miniChoiceText: {
     color: colors.sub,
     fontSize: 11,
