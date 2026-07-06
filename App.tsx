@@ -2047,7 +2047,7 @@ function EntrySheet({
       onSaveSex({
         id: editingSexRecord?.id || uid('sex'),
         dateTime: new Date(`${date}T${time || '12:00'}:00`).toISOString(),
-        count: Number(count) || 1,
+        count: Math.max(1, Math.min(99, Number(count) || 1)),
         durationMinutes: duration ? Number(duration) : undefined,
         partnerAlias: partnerAlias.trim(),
         protectionMethods,
@@ -2119,6 +2119,7 @@ function EntrySheet({
             <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
             {sexMode && <TimePickerField label="时间" value={time} onChange={setTime} />}
             {sexMode && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
+            {sexMode && <TextField label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
             {sexMode === 'partneredSex' && <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />}
             {sexMode && <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次性生活发生的地点" />}
             {sexMode === 'partneredSex' && (
@@ -2367,6 +2368,7 @@ function CalendarDay({
 }) {
   const key = toDateKey(date);
   const markers = getMarkersForDay(date, state, cycleInfo);
+  const isPeriodDay = Boolean(findPeriodForDate(state, date));
   const sexCount = state.sexRecords
     .filter((record) => toDateKey(new Date(record.dateTime)) === key)
     .reduce((sum, record) => sum + Number(record.count || 1), 0);
@@ -2382,13 +2384,13 @@ function CalendarDay({
         </LinearGradient>
       ) : (
         <>
-          <Text style={styles.calendarDayNumber}>{date.getDate()}</Text>
+          <Text style={[styles.calendarDayNumber, isPeriodDay && styles.calendarDayNumberPeriod]}>{date.getDate()}</Text>
           <Text style={styles.calendarDayNote}>{state.settings.privacyMode ? '' : note}</Text>
         </>
       )}
       {markers.length > 0 && (
         <View style={styles.calendarDayMarkerRow}>
-          {markers.slice(0, 3).map((marker) => (
+          {markers.slice(0, 1).map((marker) => (
             <View key={marker} style={[styles.calendarDayMarkerDot, markerStyle(marker), selected && styles.calendarDayMarkerDotActive]} />
           ))}
         </View>
@@ -2638,7 +2640,9 @@ function MiniChoiceRail({ options, selected, onToggle }: { options: string[]; se
         const active = selected.includes(option);
         return (
           <Pressable key={option} style={[styles.miniChoice, active && styles.miniChoiceActive]} onPress={() => onToggle(option)}>
-            <CartoonIcon name={positionIconMap[option] || 'embrace'} active={active} size={30} />
+            <View style={[styles.positionIconBubble, active && styles.positionIconBubbleActive]}>
+              <CartoonIcon name={positionIconMap[option] || 'embrace'} active={active} size={38} />
+            </View>
             <Text style={[styles.miniChoiceText, active && styles.miniChoiceTextActive]}>{option}</Text>
           </Pressable>
         );
@@ -2719,21 +2723,22 @@ type IconName =
   | 'moodHappy'
   | 'moodJoy';
 
-function PoseBody({ x, y, angle = 0, fill, variant = 'stand' }: { x: number; y: number; angle?: number; fill: string; variant?: 'stand' | 'lie' | 'kneel' | 'sit' }) {
-  const body =
-    variant === 'lie'
-      ? <Ellipse cx={x + 3} cy={y} rx={6.2} ry={3.2} fill={fill} />
-      : variant === 'kneel'
-        ? <Path d={`M${x - 3} ${y - 2} Q${x + 2} ${y - 6} ${x + 5} ${y - 1} L${x + 2} ${y + 6} Q${x - 4} ${y + 7} ${x - 5} ${y + 1} Z`} fill={fill} />
-        : variant === 'sit'
-          ? <Path d={`M${x - 4} ${y - 4} Q${x + 4} ${y - 8} ${x + 6} ${y + 1} Q${x + 2} ${y + 8} ${x - 5} ${y + 5} Z`} fill={fill} />
-          : <Ellipse cx={x} cy={y + 2} rx={3.4} ry={7} fill={fill} />;
-  const head = variant === 'lie' ? <Circle cx={x - 5.5} cy={y - 0.3} r={2.8} fill={fill} /> : <Circle cx={x} cy={y - 6.6} r={2.8} fill={fill} />;
-  return <G transform={`rotate(${angle} ${x} ${y})`}>{head}{body}</G>;
+function PoseFigure({ x, y, scale = 1, rotate = 0, flip = false, fill }: { x: number; y: number; scale?: number; rotate?: number; flip?: boolean; fill: string }) {
+  const mirror = flip ? -1 : 1;
+  return (
+    <G transform={`translate(${x} ${y}) rotate(${rotate}) scale(${mirror * scale} ${scale})`}>
+      <Circle cx={0} cy={-7.5} r={2.7} fill={fill} />
+      <Path d="M-1.8 -4.5 Q2.2 -2.8 2.8 2.5 Q1.2 5.8 -2.7 4.6 Q-4.8 1 -3.2 -2.9 Z" fill={fill} />
+      <Path d="M-2.5 3.6 Q-7.4 5.6 -8.8 10.7" stroke={fill} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      <Path d="M1.8 3.8 Q6.7 6.2 8.3 10.4" stroke={fill} strokeWidth={2.4} strokeLinecap="round" fill="none" />
+      <Path d="M-2.5 -1 Q-7.1 0.8 -9.2 4.2" stroke={fill} strokeWidth={2.1} strokeLinecap="round" fill="none" />
+      <Path d="M2 -1 Q6.7 0.9 8.9 4" stroke={fill} strokeWidth={2.1} strokeLinecap="round" fill="none" />
+    </G>
+  );
 }
 
-function PoseBase({ y = 25 }: { y?: number }) {
-  return <Line x1={6} y1={y} x2={26} y2={y} stroke="rgba(74,67,104,0.18)" strokeWidth={2.1} strokeLinecap="round" />;
+function PoseGround({ y = 26, color = 'rgba(124,112,176,0.18)' }: { y?: number; color?: string }) {
+  return <Line x1={5.5} y1={y} x2={26.5} y2={y} stroke={color} strokeWidth={2.2} strokeLinecap="round" />;
 }
 
 function CartoonIcon({ name, size = 27, active = false, color }: { name: IconName; size?: number; active?: boolean; color?: string }) {
@@ -2803,63 +2808,57 @@ function CartoonIcon({ name, size = 27, active = false, color }: { name: IconNam
     case 'sideLying':
       return svg(
         <>
-          <PoseBase y={24.5} />
-          <PoseBody x={17.6} y={13.4} variant="lie" fill={soft} angle={-4} />
-          <PoseBody x={14.6} y={19.4} variant="lie" fill={main} angle={3} />
-          <Path d="M8 17 Q16 14 24 17" stroke={ink} strokeWidth={1.2} fill="none" strokeLinecap="round" opacity={0.32} />
+          <PoseGround y={25.7} />
+          <PoseFigure x={12.5} y={20.4} scale={0.78} rotate={80} fill={main} />
+          <PoseFigure x={21.2} y={16.1} scale={0.72} rotate={82} fill={main} />
         </>
       );
     case 'prone':
       return svg(
         <>
-          <PoseBase y={25.5} />
-          <PoseBody x={13.4} y={20.2} variant="lie" fill={main} angle={1} />
-          <PoseBody x={18.7} y={14.5} variant="lie" fill={soft} angle={-18} />
-          <Line x1={10} y1={22.8} x2={23} y2={17.8} stroke={ink} strokeWidth={1.2} strokeLinecap="round" opacity={0.28} />
+          <PoseGround y={25.8} />
+          <PoseFigure x={13.2} y={21.8} scale={0.76} rotate={88} fill={main} />
+          <PoseFigure x={22.4} y={20.2} scale={0.68} rotate={98} flip fill={main} />
         </>
       );
     case 'rear':
       return svg(
         <>
-          <PoseBase y={25} />
-          <PoseBody x={13.2} y={18.6} variant="kneel" fill={main} angle={72} />
-          <PoseBody x={22.2} y={15.9} variant="kneel" fill={soft} angle={-62} />
-          <Line x1={13.5} y1={23.5} x2={22} y2={23.5} stroke={ink} strokeWidth={1.5} strokeLinecap="round" opacity={0.25} />
+          <PoseGround y={25.6} />
+          <PoseFigure x={11.4} y={18.2} scale={0.7} rotate={28} fill={main} />
+          <PoseFigure x={22.2} y={16.3} scale={0.72} rotate={-46} flip fill={main} />
         </>
       );
     case 'cowgirl':
       return svg(
         <>
-          <PoseBase y={25} />
-          <PoseBody x={16.4} y={22.2} variant="lie" fill={soft} angle={0} />
-          <PoseBody x={16} y={13.2} variant="sit" fill={main} angle={0} />
-          <Line x1={12} y1={18.8} x2={20} y2={18.8} stroke={ink} strokeWidth={1.3} strokeLinecap="round" opacity={0.28} />
+          <PoseGround y={25.5} />
+          <PoseFigure x={16.5} y={22.2} scale={0.7} rotate={88} fill={main} />
+          <PoseFigure x={16.2} y={12.7} scale={0.72} rotate={0} fill={main} />
         </>
       );
     case 'kneel':
       return svg(
         <>
-          <PoseBase y={25.5} />
-          <PoseBody x={11.8} y={17.8} variant="kneel" fill={main} angle={-12} />
-          <PoseBody x={21.2} y={17.8} variant="kneel" fill={soft} angle={12} />
-          <Path d="M13.5 20.5 Q16.5 18.5 19.5 20.5" stroke={ink} strokeWidth={1.25} fill="none" strokeLinecap="round" opacity={0.3} />
+          <PoseGround y={25.7} />
+          <PoseFigure x={11.5} y={17.5} scale={0.68} rotate={12} fill={main} />
+          <PoseFigure x={21.5} y={17.5} scale={0.68} rotate={-12} flip fill={main} />
         </>
       );
     case 'embrace':
       return svg(
         <>
-          <PoseBody x={12.6} y={17.8} variant="stand" fill={main} angle={-8} />
-          <PoseBody x={19.4} y={17.8} variant="stand" fill={soft} angle={8} />
-          <Path d="M11 15 Q16 20 21 15" stroke={ink} strokeWidth={1.5} fill="none" strokeLinecap="round" opacity={0.34} />
+          <PoseFigure x={12.8} y={18.2} scale={0.72} rotate={-4} fill={main} />
+          <PoseFigure x={19.5} y={18.2} scale={0.72} rotate={4} flip fill={main} />
+          <Path d="M10.8 15 Q16 19.5 21.2 15" stroke={main} strokeWidth={2} fill="none" strokeLinecap="round" opacity={0.9} />
         </>
       );
     case 'standing':
       return svg(
         <>
-          <PoseBase y={26} />
-          <PoseBody x={11.2} y={17.5} variant="stand" fill={main} angle={-5} />
-          <PoseBody x={21.2} y={17.2} variant="stand" fill={soft} angle={7} />
-          <Line x1={14.2} y1={18} x2={18.2} y2={18} stroke={ink} strokeWidth={1.4} strokeLinecap="round" opacity={0.3} />
+          <PoseGround y={26} />
+          <PoseFigure x={11.3} y={18.5} scale={0.72} rotate={-8} fill={main} />
+          <PoseFigure x={21} y={18.4} scale={0.72} rotate={10} flip fill={main} />
         </>
       );
     default: {
@@ -3467,29 +3466,20 @@ function buildCalendarDays(visibleMonth: Date) {
 
 function getMarkersForDay(date: Date, state: AppState, info: CycleInfo) {
   const key = toDateKey(date);
-  const markers: string[] = [];
   const sexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === key);
-  if (sexRecords.some((record) => !isSoloSexRecord(record))) markers.push('partnered-sex');
-  if (sexRecords.some((record) => isSoloSexRecord(record))) markers.push('solo-sex');
+  if (sexRecords.some((record) => !isSoloSexRecord(record))) return ['partnered-sex'];
+  if (sexRecords.some((record) => isSoloSexRecord(record))) return ['solo-sex'];
 
-  const realPeriod = state.periodRecords.some((record) => {
-    const start = parseDateKey(record.startDate);
-    const end = record.endDate ? parseDateKey(record.endDate) : addDays(start, state.settings.periodDays - 1);
-    return startOfDay(date) >= startOfDay(start) && startOfDay(date) <= startOfDay(end);
-  });
-  if (realPeriod) markers.push('period');
-
-  if (info) {
-    const day = startOfDay(date);
-    const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
-    const pmsStart = addDays(info.nextPeriod, -5);
-    const pmsEnd = addDays(info.nextPeriod, -1);
-    if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) markers.push('predicted');
-    if (day >= startOfDay(pmsStart) && day <= startOfDay(pmsEnd)) markers.push('pms');
-    if (toDateKey(day) === toDateKey(info.ovulation)) markers.push('ovulation');
-    if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) markers.push('fertile');
-  }
-  return markers;
+  if (!info) return [];
+  const day = startOfDay(date);
+  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  const pmsStart = addDays(info.nextPeriod, -5);
+  const pmsEnd = addDays(info.nextPeriod, -1);
+  if (toDateKey(day) === toDateKey(info.ovulation)) return ['ovulation'];
+  if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) return ['fertile'];
+  if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) return ['predicted'];
+  if (day >= startOfDay(pmsStart) && day <= startOfDay(pmsEnd)) return ['pms'];
+  return [];
 }
 
 function findPeriodForDate(state: AppState, date: Date) {
@@ -4424,6 +4414,9 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 13,
     fontWeight: '900',
+  },
+  calendarDayNumberPeriod: {
+    color: colors.period,
   },
   calendarDayNumberActive: {
     color: '#fff',
@@ -6050,6 +6043,19 @@ function createStyles(theme: ThemePalette) {
   },
   miniChoiceActive: {
     backgroundColor: colors.primary,
+  },
+  positionIconBubble: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(124,112,224,0.16)',
+  },
+  positionIconBubbleActive: {
+    backgroundColor: 'rgba(124,112,224,0.26)',
+    borderWidth: 2,
+    borderColor: colors.primary,
   },
   miniChoiceText: {
     color: colors.sub,
