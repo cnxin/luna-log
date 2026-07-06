@@ -1447,7 +1447,17 @@ function InsightsScreen({
   range: 'week' | 'month' | 'year';
   onRangeChange: (range: 'week' | 'month' | 'year') => void;
 }) {
-  const chart = buildSexChart(state, range);
+  const totalRecords = state.sexRecords.length + state.periodRecords.length + state.symptomRecords.length;
+  if (totalRecords === 0) return <EmptyInsights />;
+  if (state.sexRecords.length < 3) {
+    return (
+      <View style={styles.panel}>
+        <BarChart3 size={44} color={colors.sub} strokeWidth={1.9} />
+        <Text style={styles.emptyTitle}>记录还不够</Text>
+        <Text style={styles.insightHint}>再记录几次性生活后将显示趋势、时长和时间分布</Text>
+      </View>
+    );
+  }  const chart = buildSexChart(state, range);
   const durationStats = buildDurationStats(state, range);
   const timeDistribution = buildTimeDistribution(state, range);
   const distributionTotal = timeDistribution.reduce((sum, item) => sum + item.count, 0);
@@ -1560,7 +1570,16 @@ function InsightsScreen({
   );
 }
 
-function SettingsScreen({
+
+function EmptyInsights() {
+  return (
+    <View style={styles.emptyInsights}>
+      <BarChart3 size={68} color={colors.sub} strokeWidth={1.8} />
+      <Text style={styles.emptyTitle}>还没有统计数据</Text>
+      <Text style={styles.emptyHint}>点击右下角 + 开始记录</Text>
+    </View>
+  );
+}function SettingsScreen({
   state,
   onPatch,
   onClear,
@@ -4724,7 +4743,32 @@ function createStyles(theme: ThemePalette) {
     color: colors.danger,
     backgroundColor: colors.dangerSoft,
   },
-  emptyInline: {
+  emptyInsights: {
+    flex: 1,
+    minHeight: 420,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 14,
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  emptyHint: {
+    color: colors.sub,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  insightHint: {
+    color: colors.sub,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 20,
+  },  emptyInline: {
     color: colors.sub,
     fontSize: 13,
   },
