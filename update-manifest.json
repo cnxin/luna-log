@@ -1,20 +1,20 @@
 {
-    "version":  "1.0.4",
+    "version":  "1.0.5",
     "releaseDate":  "2026-07-07",
     "publishedAt":  "2026-07-07T00:00:00Z",
-    "title":  "Luna Log period day status and built-in updater improvements",
+    "title":  "Luna Log 1.0.5：内置下载和日历网格修复",
     "highlights":  [
-                       "Added daily menstrual status records for flow, cramps, symptoms and notes.",
-                       "Built-in updater now checks multiple sources and retries a fallback APK source.",
-                       "Updater shows download source, progress, speed and remaining time.",
-                       "Android versionCode is 5, supporting upgrades from 1.0.3."
+                       "内置升级优先下载 GitHub Release APK，避免错误使用不存在的 CDN 镜像。",
+                       "更新清单不再写入无效 mirrorApkUrl，下载失败时会回退到有效入口。",
+                       "日历改为按周固定 7 列渲染，修复日期只显示 6 列和星期标题不对齐的问题。",
+                       "Android versionCode 更新到 6，支持从 1.0.4 正常升级安装。"
                    ],
-    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.4/luna-log-v1.0.4-release.apk",
-    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.4/luna-log-v1.0.4-release.apk",
-    "mirrorApkUrl":  "https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/downloads/luna-log-v1.0.4-release.apk",
-    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.4",
-    "apkName":  "luna-log-v1.0.4-release.apk",
-    "apkSize":  76650307,
-    "apkSha256":  "0acb5fe2973298adfe503f0cb9aab3ef4982f54c4b03060ca54d8f7de425675c",
+    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
+    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
+    "mirrorApkUrl":  "",
+    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.5",
+    "apkName":  "luna-log-v1.0.5-release.apk",
+    "apkSize":  76650555,
+    "apkSha256":  "49127d6632888083ce74ae2e084f1b6ed3ecfcd16c7cb97df828da7aef1e6fdc",
     "mandatory":  false
 }

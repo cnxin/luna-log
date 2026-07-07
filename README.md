@@ -4,8 +4,8 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 
 ## 当前版本
 
-- 应用版本：`1.0.4`
-- Android versionCode：`5`
+- 应用版本：`1.0.5`
+- Android versionCode：`6`
 - Android 包名：`com.anonymous.lunalog`
 - GitHub 仓库：`https://github.com/cnxin/luna-log`
 
@@ -22,6 +22,13 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 - 数据管理：支持 JSON 数据导入/导出，本地备份和恢复。
 - 内置升级：关于页可检查更新、查看来源诊断、内置下载 APK，并显示下载来源、进度、速度和剩余时间。
 
+## 1.0.5 更新
+
+- 修复内置升级下载一直停在 0% 后失败的问题：优先使用 GitHub Release APK，不再默认使用不存在的 CDN 镜像。
+- 修复日历日期和星期标题不对齐、真机上一行只显示 6 个日期的问题。
+- 日历改为按周固定 7 列渲染，星期标题和日期格使用一致的列间距。
+- Android `versionCode` 更新到 `6`，支持从 `1.0.4` 正常升级安装。
+
 ## 1.0.4 更新
 
 - 新增经期内每天的经量、痛经、症状和备注记录。
@@ -35,20 +42,20 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 当前版本 Release：
 
 ```text
-https://github.com/cnxin/luna-log/releases/tag/v1.0.4
+https://github.com/cnxin/luna-log/releases/tag/v1.0.5
 ```
 
 Android APK：
 
 ```text
-https://github.com/cnxin/luna-log/releases/download/v1.0.4/luna-log-v1.0.4-release.apk
+https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk
 ```
 
 APK 校验：
 
 ```text
-SHA256: 0acb5fe2973298adfe503f0cb9aab3ef4982f54c4b03060ca54d8f7de425675c
-Size: 76650307 bytes
+SHA256: 49127d6632888083ce74ae2e084f1b6ed3ecfcd16c7cb97df828da7aef1e6fdc
+Size: 76650555 bytes
 ```
 
 ## 开发运行

@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "1.0.4",
+  [string]$Version = "1.0.5",
   [string]$ApkPath = "android\app\build\outputs\apk\release\app-release.apk"
 )
 
@@ -26,7 +26,7 @@ $manifest.apkSize = $apk.Length
 $manifest.apkSha256 = $sha256
 $manifest.downloadUrl = "https://github.com/cnxin/luna-log/releases/download/v$Version/$apkName"
 $manifest.apkUrl = $manifest.downloadUrl
-$manifest.mirrorApkUrl = "https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/downloads/$apkName"
+$manifest.mirrorApkUrl = ""
 $manifest.releaseUrl = "https://github.com/cnxin/luna-log/releases/tag/v$Version"
 
 $encoding = [System.Text.UTF8Encoding]::new($false)

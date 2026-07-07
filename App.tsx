@@ -243,7 +243,7 @@ type UpdateDownloadState = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.4';
+const APP_VERSION = '1.0.5';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
@@ -758,7 +758,7 @@ function normalizeGitHubRelease(payload: GitHubReleasePayload, source: UpdateSou
     sourceUrl: source.url,
     downloadUrl: apkAsset?.browser_download_url,
     apkUrl: apkAsset?.browser_download_url,
-    mirrorApkUrl: apkAsset?.name ? `https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/downloads/${apkAsset.name}` : undefined,
+    mirrorApkUrl: undefined,
     releaseUrl: payload.html_url || `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
     apkName: apkAsset?.name || `luna-log-v${latestVersion}.apk`,
     fileSize: apkAsset?.size,
@@ -833,7 +833,7 @@ async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostic
 }
 
 function getPreferredApkUrl(info?: AppUpdateInfo | null) {
-  return info?.mirrorApkUrl || info?.apkUrl || info?.downloadUrl || info?.releaseUrl || '';
+  return info?.apkUrl || info?.downloadUrl || info?.mirrorApkUrl || info?.releaseUrl || '';
 }
 
 function getFallbackApkUrl(info?: AppUpdateInfo | null) {
@@ -1538,6 +1538,7 @@ function CalendarScreen({
   onEditPeriodDay: (record: PeriodDayRecord | null, dateKey: string) => void;
 }) {
   const days = buildCalendarDays(visibleMonth);
+  const calendarWeeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => days.slice(index * 7, index * 7 + 7));
   const monthTitle = monthLabel(visibleMonth);
   const prediction = cycleInfo ? `下次经期预计 ${shortDate(cycleInfo.nextPeriod)} 开始` : '添加经期开始日后显示预测';
   const selectedDate = selectedDateKey ? parseDateKey(selectedDateKey) : new Date();
@@ -1759,16 +1760,20 @@ function CalendarScreen({
           ))}
         </View>
         <View style={styles.calendarGrid}>
-          {days.map((date) => (
-            <CalendarDay
-              key={date.toISOString()}
-              date={date}
-              visibleMonth={visibleMonth}
-              state={state}
-              cycleInfo={cycleInfo}
-              selected={toDateKey(date) === toDateKey(selectedDate)}
-              onPress={() => onSelectDate(date)}
-            />
+          {calendarWeeks.map((week, weekIndex) => (
+            <View style={styles.calendarWeekRow} key={`week-${weekIndex}`}>
+              {week.map((date) => (
+                <CalendarDay
+                  key={date.toISOString()}
+                  date={date}
+                  visibleMonth={visibleMonth}
+                  state={state}
+                  cycleInfo={cycleInfo}
+                  selected={toDateKey(date) === toDateKey(selectedDate)}
+                  onPress={() => onSelectDate(date)}
+                />
+              ))}
+            </View>
           ))}
         </View>
       </View>
@@ -4874,8 +4879,8 @@ function createStyles(theme: ThemePalette) {
   },
   weekdayGrid: {
     flexDirection: 'row',
+    gap: 4,
     marginBottom: 8,
-    gap: 6,
   },
   weekday: {
     flex: 1,
@@ -4885,12 +4890,14 @@ function createStyles(theme: ThemePalette) {
     textAlign: 'center',
   },
   calendarGrid: {
+    gap: 4,
+  },
+  calendarWeekRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    gap: 4,
   },
   calendarDay: {
-    width: '13.25%',
+    flex: 1,
     aspectRatio: 1,
     borderRadius: 14,
     alignItems: 'center',
