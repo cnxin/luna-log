@@ -244,7 +244,7 @@ type UpdateDownloadState = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.7';
+const APP_VERSION = '1.0.8';
 const ANDROID_PACKAGE_NAME = 'com.anonymous.lunalog';
 const APK_MIME_TYPE = 'application/vnd.android.package-archive';
 const FLAG_GRANT_READ_URI_PERMISSION = 1;
@@ -280,6 +280,17 @@ const UPDATE_SOURCES: UpdateSource[] = [
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.8',
+    date: '2026-07-07',
+    title: '优化 App 图标安全边距',
+    highlights: [
+      '缩小并内移左右月牙，避免圆角裁切后露出边界',
+      '整体图案上移，让图标视觉重心更接近居中',
+      '同步更新 Android 原生启动图标资源',
+      '更新 Android versionCode 到 9，支持从 1.0.7 正常升级安装',
+    ],
+  },
   {
     version: '1.0.7',
     date: '2026-07-07',
