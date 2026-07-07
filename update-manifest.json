@@ -1,20 +1,20 @@
 {
-    "version":  "1.0.5",
+    "version":  "1.0.6",
     "releaseDate":  "2026-07-07",
     "publishedAt":  "2026-07-07T00:00:00Z",
-    "title":  "Luna Log 1.0.5：内置下载和日历网格修复",
+    "title":  "Luna Log 1.0.6：内置更新安装体验修复",
     "highlights":  [
-                       "内置升级优先读取 Gitee 国内镜像清单，APK 下载使用 GitHub Release 入口。",
-                       "Gitee 保留代码和更新清单镜像，避免 GitHub raw 清单不稳定导致无法检查更新。",
-                       "日历改为按周固定 7 列渲染，修复日期只显示 6 列和星期标题不对齐的问题。",
-                       "Android versionCode 更新到 6，支持从 1.0.4 正常升级安装。"
+                       "Android 下载 APK 后直接拉起系统安装器，不再弹出打开方式选择。",
+                       "新增 REQUEST_INSTALL_PACKAGES 权限，未授权时提示允许 Luna Log 安装未知应用。",
+                       "更新内置安装流程为 content URI + 系统安装器 Intent。",
+                       "Android versionCode 更新到 7，支持从 1.0.5 正常升级安装。"
                    ],
-    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
-    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
+    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.6/luna-log-v1.0.6-release.apk",
+    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.6/luna-log-v1.0.6-release.apk",
     "mirrorApkUrl":  "",
-    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.5",
-    "apkName":  "luna-log-v1.0.5-release.apk",
-    "apkSize":  76650719,
-    "apkSha256":  "508b6043ae08d21e7c26dbfc89da5748db52132ea52cb41047ef465fdc194c84",
+    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.6",
+    "apkName":  "luna-log-v1.0.6-release.apk",
+    "apkSize":  76668183,
+    "apkSha256":  "f5c9a2ece249e2f15c36997ba7c5ff4695c80e75e45617d30fb5b188511df685",
     "mandatory":  false
 }

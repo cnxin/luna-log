@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
@@ -243,7 +244,10 @@ type UpdateDownloadState = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.5';
+const APP_VERSION = '1.0.6';
+const ANDROID_PACKAGE_NAME = 'com.anonymous.lunalog';
+const APK_MIME_TYPE = 'application/vnd.android.package-archive';
+const FLAG_GRANT_READ_URI_PERMISSION = 1;
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const GITEE_UPDATE_MANIFEST_URL = 'https://gitee.com/api/v5/repos/ysjugg/luna-log/contents/update-manifest.json?ref=master';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
@@ -1098,6 +1102,26 @@ export default function App() {
     return result.uri;
   }
 
+  async function openAndroidApkInstaller(fileUri: string) {
+    const contentUri = await FileSystem.getContentUriAsync(fileUri);
+    try {
+      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+        data: contentUri,
+        type: APK_MIME_TYPE,
+        flags: FLAG_GRANT_READ_URI_PERMISSION,
+      });
+    } catch (error) {
+      try {
+        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.MANAGE_UNKNOWN_APP_SOURCES, {
+          data: `package:${ANDROID_PACKAGE_NAME}`,
+        });
+      } catch {
+        // Some Android skins do not support the app-specific unknown-source settings URI.
+      }
+      throw error;
+    }
+  }
+
   async function handleDownloadUpdate(info?: AppUpdateInfo | null) {
     const primaryUrl = getPreferredApkUrl(info);
     if (!info || !primaryUrl) {
@@ -1119,8 +1143,14 @@ export default function App() {
         uri = await downloadUpdateFromUrl(info, fallbackUrl, true);
       }
       setUpdateDownload({ downloading: false, progress: 1, stage: 'done', sourceLabel: formatDownloadSource(primaryUrl), speedBytesPerSecond: 0, remainingSeconds: 0, message: '下载完成' });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/vnd.android.package-archive', dialogTitle: '安装 Luna Log 更新' });
+      if (Platform.OS === 'android') {
+        try {
+          await openAndroidApkInstaller(uri);
+        } catch {
+          Alert.alert('需要安装权限', '安装器没有成功打开。请允许 Luna Log 安装未知应用后，再点击一次下载更新。');
+        }
+      } else if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: APK_MIME_TYPE, dialogTitle: '安装 Luna Log 更新' });
       } else {
         openExternalUrl(fallbackUrl || primaryUrl);
       }
