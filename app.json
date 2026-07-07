@@ -4,24 +4,22 @@
                  "slug":  "luna-log",
                  "version":  "1.0.5",
                  "orientation":  "portrait",
-                 "icon":  "./assets/icon.png",
+                 "icon":  "./assets/app-icons/icon-1024.png",
                  "userInterfaceStyle":  "light",
                  "ios":  {
                              "supportsTablet":  true
                          },
                  "android":  {
                                  "adaptiveIcon":  {
-                                                      "backgroundColor":  "#E6F4FE",
-                                                      "foregroundImage":  "./assets/android-icon-foreground.png",
-                                                      "backgroundImage":  "./assets/android-icon-background.png",
-                                                      "monochromeImage":  "./assets/android-icon-monochrome.png"
+                                                      "foregroundImage":  "./assets/app-icons/adaptive-icon-foreground.png",
+                                                      "backgroundColor":  "#F8FBFF"
                                                   },
                                  "predictiveBackGestureEnabled":  false,
                                  "package":  "com.anonymous.lunalog",
                                  "versionCode":  6
                              },
                  "web":  {
-                             "favicon":  "./assets/favicon.png"
+                             "favicon":  "./assets/app-icons/favicon-512.png"
                          },
                  "plugins":  [
                                  "expo-sharing"
