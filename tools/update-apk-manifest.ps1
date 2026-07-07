@@ -26,7 +26,7 @@ $manifest.apkSize = $apk.Length
 $manifest.apkSha256 = $sha256
 $manifest.downloadUrl = "https://github.com/cnxin/luna-log/releases/download/v$Version/$apkName"
 $manifest.apkUrl = $manifest.downloadUrl
-$manifest.mirrorApkUrl = ""
+$manifest.mirrorApkUrl = "https://gitee.com/ysjugg/luna-log/raw/master/downloads/$apkName"
 $manifest.releaseUrl = "https://github.com/cnxin/luna-log/releases/tag/v$Version"
 
 $encoding = [System.Text.UTF8Encoding]::new($false)

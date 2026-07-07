@@ -156,7 +156,7 @@ type ReleaseNote = {
   highlights: string[];
 };
 
-type UpdateSourceKind = 'manifest' | 'github-release';
+type UpdateSourceKind = 'manifest' | 'gitee-manifest' | 'github-release';
 
 type UpdateSource = {
   key: string;
@@ -245,8 +245,16 @@ const today = new Date();
 const storageKey = 'luna-log-app-v5';
 const APP_VERSION = '1.0.5';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
+const GITEE_UPDATE_MANIFEST_URL = 'https://gitee.com/api/v5/repos/ysjugg/luna-log/contents/update-manifest.json?ref=master';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
+  {
+    key: 'gitee',
+    name: 'Gitee 国内镜像清单',
+    url: GITEE_UPDATE_MANIFEST_URL,
+    kind: 'gitee-manifest',
+    timeoutMs: 5200,
+  },
   {
     key: 'github-raw',
     name: 'GitHub Raw',
@@ -712,6 +720,20 @@ function updateNotesFromManifest(manifest: AppUpdateManifest) {
   return [];
 }
 
+type GiteeContentPayload = {
+  content?: string;
+  encoding?: string;
+};
+
+function decodeGiteeManifest(payload: GiteeContentPayload): AppUpdateManifest {
+  if (!payload.content) throw new Error('Gitee 清单为空');
+  const compact = payload.content.replace(/\s/g, '');
+  if (typeof atob !== 'function') throw new Error('当前环境不支持 base64 解码');
+  const binary = atob(compact);
+  const escaped = Array.from(binary, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+  return JSON.parse(decodeURIComponent(escaped)) as AppUpdateManifest;
+}
+
 function normalizeManifest(manifest: AppUpdateManifest, source: UpdateSource, checkedAt: string): AppUpdateInfo {
   const latestVersion = (manifest.version || APP_VERSION).replace(/^v/i, '');
   const notes = updateNotesFromManifest(manifest);
@@ -805,7 +827,7 @@ function chooseBestUpdate(infos: AppUpdateInfo[]) {
   return [...infos].sort((left, right) => {
     const versionCompare = compareVersions(right.latestVersion, left.latestVersion);
     if (versionCompare !== 0) return versionCompare;
-    const priority = (source?: string) => (source?.includes('jsDelivr') ? 0 : source?.includes('GitHub Release') ? 1 : 2);
+    const priority = (source?: string) => (source?.includes('Gitee') ? 0 : source?.includes('jsDelivr') ? 1 : source?.includes('GitHub Release') ? 2 : 3);
     return priority(left.sourceName) - priority(right.sourceName);
   })[0];
 }
@@ -833,7 +855,7 @@ async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostic
 }
 
 function getPreferredApkUrl(info?: AppUpdateInfo | null) {
-  return info?.apkUrl || info?.downloadUrl || info?.mirrorApkUrl || info?.releaseUrl || '';
+  return info?.mirrorApkUrl || info?.apkUrl || info?.downloadUrl || info?.releaseUrl || '';
 }
 
 function getFallbackApkUrl(info?: AppUpdateInfo | null) {
@@ -843,7 +865,7 @@ function getFallbackApkUrl(info?: AppUpdateInfo | null) {
 
 function formatDownloadSource(url?: string) {
   if (!url) return '未知来源';
-  if (url.includes('gitee.com')) return 'Gitee 镜像';
+  if (url.includes('gitee.com')) return 'Gitee 国内镜像';
   if (url.includes('cdn.jsdelivr')) return 'jsDelivr CDN';
   if (url.includes('github.com')) return 'GitHub Release';
   return '下载链接';
