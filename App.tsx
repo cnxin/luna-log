@@ -54,7 +54,7 @@ import {
 } from 'react-native';
 
 type Screen = 'home' | 'calendar' | 'insights' | 'settings';
-type SheetType = 'partneredSex' | 'soloSex' | 'period' | 'symptom';
+type SheetType = 'partneredSex' | 'soloSex' | 'period' | 'periodDay' | 'symptom';
 type RecordType = 'sex' | 'period' | 'symptom';
 type ThemeStyle = 'classic' | 'mint' | 'blue';
 
@@ -95,6 +95,15 @@ type PeriodRecord = {
   notes?: string;
 };
 
+type PeriodDayRecord = {
+  id: string;
+  date: string;
+  flow?: string;
+  painLevel: number;
+  symptoms: string[];
+  notes?: string;
+};
+
 type SymptomRecord = {
   id: string;
   date: string;
@@ -106,6 +115,7 @@ type SymptomRecord = {
 type AppState = {
   sexRecords: SexRecord[];
   periodRecords: PeriodRecord[];
+  periodDayRecords: PeriodDayRecord[];
   symptomRecords: SymptomRecord[];
   settings: {
     privacyMode: boolean;
@@ -146,16 +156,20 @@ type ReleaseNote = {
   highlights: string[];
 };
 
+type UpdateSourceKind = 'manifest' | 'github-release';
+
 type UpdateSource = {
   key: string;
   name: string;
   url: string;
+  kind: UpdateSourceKind;
+  timeoutMs?: number;
 };
 
 type UpdateSourceDiagnostic = {
   sourceName: string;
   sourceUrl: string;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'skipped';
   message: string;
   durationMs: number;
   version?: string;
@@ -164,14 +178,36 @@ type UpdateSourceDiagnostic = {
 type AppUpdateManifest = {
   version?: string;
   releaseDate?: string;
+  publishedAt?: string;
   title?: string;
   notes?: string[];
   highlights?: string[];
   changelog?: string;
+  body?: string;
   downloadUrl?: string;
+  apkUrl?: string;
+  mirrorApkUrl?: string;
   releaseUrl?: string;
+  apkName?: string;
   fileSize?: number;
+  apkSize?: number;
+  apkSha256?: string;
   mandatory?: boolean;
+};
+
+type GitHubReleaseAsset = {
+  name?: string;
+  browser_download_url?: string;
+  size?: number;
+};
+
+type GitHubReleasePayload = {
+  tag_name?: string;
+  html_url?: string;
+  name?: string;
+  body?: string;
+  published_at?: string;
+  assets?: GitHubReleaseAsset[];
 };
 
 type AppUpdateInfo = {
@@ -185,29 +221,64 @@ type AppUpdateInfo = {
   sourceName?: string;
   sourceUrl?: string;
   downloadUrl?: string;
+  apkUrl?: string;
+  mirrorApkUrl?: string;
   releaseUrl?: string;
+  apkName?: string;
   fileSize?: number;
+  apkSize?: number;
+  apkSha256?: string;
   mandatory?: boolean;
+};
+
+type UpdateDownloadState = {
+  downloading: boolean;
+  progress: number;
+  stage: 'idle' | 'downloading' | 'fallback' | 'verifying' | 'opening' | 'failed' | 'done';
+  sourceLabel: string;
+  speedBytesPerSecond: number;
+  remainingSeconds: number | null;
+  message: string;
 };
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.3';
+const APP_VERSION = '1.0.4';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
+const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
   {
     key: 'github-raw',
     name: 'GitHub Raw',
     url: 'https://raw.githubusercontent.com/cnxin/luna-log/master/update-manifest.json',
+    kind: 'manifest',
   },
   {
     key: 'jsdelivr',
-    name: 'jsDelivr 镜像',
+    name: 'jsDelivr CDN',
     url: 'https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/update-manifest.json',
+    kind: 'manifest',
+  },
+  {
+    key: 'github-release',
+    name: 'GitHub Release',
+    url: LATEST_RELEASE_URL,
+    kind: 'github-release',
+    timeoutMs: 7000,
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.0.4',
+    date: '2026-07-07',
+    title: '每日经期状态和内置升级优化',
+    highlights: [
+      '新增经期内每天的经量、痛经、症状和备注记录',
+      '内置升级支持多来源检查、备用源重试和下载进度展示',
+      '更新清单兼容 apkUrl、mirrorApkUrl、apkName、apkSize 和 apkSha256 字段',
+      '更新 Android versionCode 到 5，支持从 1.0.3 正常升级安装',
+    ],
+  },  {
     version: '1.0.3',
     date: '2026-07-06',
     title: '图标素材和记录体验优化',
@@ -349,6 +420,7 @@ let colors = themePalettes.classic;
 const initialState: AppState = {
   sexRecords: [],
   periodRecords: [],
+  periodDayRecords: [],
   symptomRecords: [],
   settings: {
     privacyMode: false,
@@ -377,13 +449,14 @@ function normalizeImportedState(value: unknown): AppState | null {
   return {
     sexRecords: data.sexRecords,
     periodRecords: data.periodRecords,
+    periodDayRecords: Array.isArray(data.periodDayRecords) ? data.periodDayRecords : [],
     symptomRecords: data.symptomRecords,
     settings: { ...initialState.settings, ...importedSettings },
   };
 }
 
 function hasAnyUserData(state: AppState) {
-  return state.sexRecords.length > 0 || state.periodRecords.length > 0 || state.symptomRecords.length > 0;
+  return state.sexRecords.length > 0 || state.periodRecords.length > 0 || state.periodDayRecords.length > 0 || state.symptomRecords.length > 0;
 }
 
 function downloadJsonOnWeb(filename: string, json: string) {
@@ -617,13 +690,13 @@ function formatCheckedAt(value?: string) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
-async function fetchWithTimeout(url: string, timeoutMs = 7000) {
+async function fetchWithTimeout(url: string, timeoutMs = 7000, headers?: Record<string, string>) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       cache: 'no-store',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(headers || {}) },
       signal: controller.signal,
     });
   } finally {
@@ -631,76 +704,119 @@ async function fetchWithTimeout(url: string, timeoutMs = 7000) {
   }
 }
 
+function updateNotesFromManifest(manifest: AppUpdateManifest) {
+  if (manifest.highlights?.length) return manifest.highlights;
+  if (manifest.notes?.length) return manifest.notes;
+  if (manifest.body) return manifest.body.split('\n').map((line) => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean).slice(0, 6);
+  if (manifest.changelog) return [manifest.changelog];
+  return [];
+}
+
 function normalizeManifest(manifest: AppUpdateManifest, source: UpdateSource, checkedAt: string): AppUpdateInfo {
-  const latestVersion = manifest.version || APP_VERSION;
-  const notes = manifest.highlights?.length ? manifest.highlights : manifest.notes?.length ? manifest.notes : manifest.changelog ? [manifest.changelog] : [];
+  const latestVersion = (manifest.version || APP_VERSION).replace(/^v/i, '');
+  const notes = updateNotesFromManifest(manifest);
   const hasUpdate = compareVersions(latestVersion, APP_VERSION) > 0;
+  const apkUrl = manifest.apkUrl || manifest.downloadUrl || '';
+  const apkSize = manifest.apkSize || manifest.fileSize || 0;
   return {
     status: hasUpdate ? 'available' : 'latest',
     localVersion: APP_VERSION,
     latestVersion,
     title: manifest.title || (hasUpdate ? '发现新版本' : '当前已是最新版本'),
     notes,
-    releaseDate: manifest.releaseDate,
+    releaseDate: manifest.releaseDate || manifest.publishedAt,
     checkedAt,
     sourceName: source.name,
     sourceUrl: source.url,
-    downloadUrl: manifest.downloadUrl,
-    releaseUrl: manifest.releaseUrl || UPDATE_REPOSITORY_URL,
-    fileSize: manifest.fileSize,
+    downloadUrl: manifest.downloadUrl || apkUrl || manifest.mirrorApkUrl,
+    apkUrl,
+    mirrorApkUrl: manifest.mirrorApkUrl,
+    releaseUrl: manifest.releaseUrl || `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
+    apkName: manifest.apkName || `luna-log-v${latestVersion}.apk`,
+    fileSize: apkSize,
+    apkSize,
+    apkSha256: manifest.apkSha256,
     mandatory: manifest.mandatory,
   };
 }
 
+function normalizeGitHubRelease(payload: GitHubReleasePayload, source: UpdateSource, checkedAt: string): AppUpdateInfo | null {
+  const latestVersion = (payload.tag_name || '').replace(/^v/i, '');
+  if (!latestVersion) return null;
+  const apkAsset = (payload.assets || []).find((asset) => asset.name?.toLowerCase().endsWith('.apk'));
+  const notes = payload.body?.split('\n').map((line) => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean).slice(0, 6) || [];
+  const hasUpdate = compareVersions(latestVersion, APP_VERSION) > 0;
+  return {
+    status: hasUpdate ? 'available' : 'latest',
+    localVersion: APP_VERSION,
+    latestVersion,
+    title: payload.name || (hasUpdate ? '发现新版本' : '当前已是最新版本'),
+    notes,
+    releaseDate: payload.published_at,
+    checkedAt,
+    sourceName: source.name,
+    sourceUrl: source.url,
+    downloadUrl: apkAsset?.browser_download_url,
+    apkUrl: apkAsset?.browser_download_url,
+    mirrorApkUrl: apkAsset?.name ? `https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/downloads/${apkAsset.name}` : undefined,
+    releaseUrl: payload.html_url || `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
+    apkName: apkAsset?.name || `luna-log-v${latestVersion}.apk`,
+    fileSize: apkAsset?.size,
+    apkSize: apkAsset?.size,
+  };
+}
+
+async function readUpdateSource(source: UpdateSource, checkedAt: string) {
+  const startedAt = Date.now();
+  const timeoutMs = source.timeoutMs || 6500;
+  try {
+    const url = source.kind === 'manifest' ? `${source.url}${source.url.includes('?') ? '&' : '?'}t=${Date.now()}` : source.url;
+    const response = await fetchWithTimeout(url, timeoutMs, source.kind === 'github-release' ? { Accept: 'application/vnd.github+json' } : undefined);
+    const durationMs = Date.now() - startedAt;
+    if (!response.ok) {
+      return { info: null, diagnostic: { sourceName: source.name, sourceUrl: source.url, status: 'failed' as const, message: `HTTP ${response.status}`, durationMs } };
+    }
+    const payload = await response.json();
+    const info = source.kind === 'github-release'
+      ? normalizeGitHubRelease(payload as GitHubReleasePayload, source, checkedAt)
+      : normalizeManifest(payload as AppUpdateManifest, source, checkedAt);
+    if (!info) {
+      return { info: null, diagnostic: { sourceName: source.name, sourceUrl: source.url, status: 'failed' as const, message: '未读取到版本号', durationMs } };
+    }
+    return {
+      info,
+      diagnostic: { sourceName: source.name, sourceUrl: source.url, status: 'success' as const, message: info.apkName || info.releaseUrl || '已读取更新信息', durationMs, version: info.latestVersion },
+    };
+  } catch (error) {
+    return {
+      info: null,
+      diagnostic: {
+        sourceName: source.name,
+        sourceUrl: source.url,
+        status: 'failed' as const,
+        message: error instanceof Error && error.name === 'AbortError' ? '请求超时' : error instanceof Error ? error.message : '网络不可用',
+        durationMs: Date.now() - startedAt,
+      },
+    };
+  }
+}
+
+function chooseBestUpdate(infos: AppUpdateInfo[]) {
+  return [...infos].sort((left, right) => {
+    const versionCompare = compareVersions(right.latestVersion, left.latestVersion);
+    if (versionCompare !== 0) return versionCompare;
+    const priority = (source?: string) => (source?.includes('jsDelivr') ? 0 : source?.includes('GitHub Release') ? 1 : 2);
+    return priority(left.sourceName) - priority(right.sourceName);
+  })[0];
+}
+
 async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostics: UpdateSourceDiagnostic[] }> {
   const checkedAt = new Date().toISOString();
-  const diagnostics: UpdateSourceDiagnostic[] = [];
-
-  for (const source of UPDATE_SOURCES) {
-    const startedAt = Date.now();
-    try {
-      const response = await fetchWithTimeout(`${source.url}?t=${Date.now()}`);
-      const durationMs = Date.now() - startedAt;
-      if (!response.ok) {
-        diagnostics.push({
-          sourceName: source.name,
-          sourceUrl: source.url,
-          status: 'failed',
-          message: `HTTP ${response.status}`,
-          durationMs,
-        });
-        continue;
-      }
-      const manifest = (await response.json()) as AppUpdateManifest;
-      if (!manifest.version) {
-        diagnostics.push({
-          sourceName: source.name,
-          sourceUrl: source.url,
-          status: 'failed',
-          message: 'manifest 缺少 version',
-          durationMs,
-        });
-        continue;
-      }
-      diagnostics.push({
-        sourceName: source.name,
-        sourceUrl: source.url,
-        status: 'success',
-        message: '已读取更新清单',
-        durationMs,
-        version: manifest.version,
-      });
-      return { info: normalizeManifest(manifest, source, checkedAt), diagnostics };
-    } catch (error) {
-      diagnostics.push({
-        sourceName: source.name,
-        sourceUrl: source.url,
-        status: 'failed',
-        message: error instanceof Error && error.name === 'AbortError' ? '请求超时' : '网络不可用',
-        durationMs: Date.now() - startedAt,
-      });
-    }
-  }
+  const results = await Promise.all(UPDATE_SOURCES.map((source) => readUpdateSource(source, checkedAt)));
+  const diagnostics = results.map((result) => result.diagnostic);
+  const infos = results.map((result) => result.info).filter((item): item is AppUpdateInfo => Boolean(item));
+  const info = chooseBestUpdate(infos);
+  if (info) return { info, diagnostics };
 
   return {
     info: {
@@ -716,6 +832,38 @@ async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostic
   };
 }
 
+function getPreferredApkUrl(info?: AppUpdateInfo | null) {
+  return info?.mirrorApkUrl || info?.apkUrl || info?.downloadUrl || info?.releaseUrl || '';
+}
+
+function getFallbackApkUrl(info?: AppUpdateInfo | null) {
+  const preferred = getPreferredApkUrl(info);
+  return [info?.apkUrl, info?.downloadUrl, info?.mirrorApkUrl, info?.releaseUrl].filter((url): url is string => Boolean(url && url !== preferred))[0] || '';
+}
+
+function formatDownloadSource(url?: string) {
+  if (!url) return '未知来源';
+  if (url.includes('gitee.com')) return 'Gitee 镜像';
+  if (url.includes('cdn.jsdelivr')) return 'jsDelivr CDN';
+  if (url.includes('github.com')) return 'GitHub Release';
+  return '下载链接';
+}
+
+function emptyUpdateDownloadState(): UpdateDownloadState {
+  return { downloading: false, progress: 0, stage: 'idle', sourceLabel: '', speedBytesPerSecond: 0, remainingSeconds: null, message: '' };
+}
+
+function formatSpeed(bytesPerSecond: number) {
+  if (!bytesPerSecond || bytesPerSecond <= 0) return '--/s';
+  if (bytesPerSecond < 1024 * 1024) return `${Math.round(bytesPerSecond / 1024)} KB/s`;
+  return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
+}
+
+function formatRemaining(seconds: number | null) {
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return '--';
+  if (seconds < 60) return `${Math.ceil(seconds)} 秒`;
+  return `${Math.ceil(seconds / 60)} 分钟`;
+}
 export default function App() {
   const [state, setState] = useState<AppState>(initialState);
   const [loaded, setLoaded] = useState(false);
@@ -724,6 +872,7 @@ export default function App() {
   const [sheetType, setSheetType] = useState<SheetType | null>(null);
   const [editingSexRecord, setEditingSexRecord] = useState<SexRecord | null>(null);
   const [editingPeriodRecord, setEditingPeriodRecord] = useState<PeriodRecord | null>(null);
+  const [editingPeriodDayRecord, setEditingPeriodDayRecord] = useState<PeriodDayRecord | null>(null);
   const [editingSymptomRecord, setEditingSymptomRecord] = useState<SymptomRecord | null>(null);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [statsRange, setStatsRange] = useState<'week' | 'month' | 'year'>('year');
@@ -732,7 +881,7 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateDiagnostics, setUpdateDiagnostics] = useState<UpdateSourceDiagnostic[]>([]);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateDownload, setUpdateDownload] = useState({ downloading: false, progress: 0 });
+  const [updateDownload, setUpdateDownload] = useState<UpdateDownloadState>(emptyUpdateDownloadState());
   const [notice, setNotice] = useState<{ message: string; action?: { label: string; run: () => void } } | null>(null);
   const loadedRef = useRef(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -755,6 +904,7 @@ export default function App() {
         setState({
           sexRecords: parsed.sexRecords || [],
           periodRecords: parsed.periodRecords || [],
+          periodDayRecords: parsed.periodDayRecords || [],
           symptomRecords: parsed.symptomRecords || [],
           settings: { ...initialState.settings, ...(parsed.settings || {}) },
         });
@@ -822,7 +972,7 @@ export default function App() {
       {
         text: '清空',
         style: 'destructive',
-        onPress: () => patchState((current) => ({ ...current, sexRecords: [], periodRecords: [], symptomRecords: [] })),
+        onPress: () => patchState((current) => ({ ...current, sexRecords: [], periodRecords: [], periodDayRecords: [], symptomRecords: [] })),
       },
     ]);
   }
@@ -896,40 +1046,65 @@ export default function App() {
     }
   }
 
+  async function downloadUpdateFromUrl(info: AppUpdateInfo, url: string, fallback: boolean) {
+    if (!FileSystem.documentDirectory) throw new Error('document directory unavailable');
+    const filename = info.apkName || `luna-log-v${info.latestVersion}.apk`;
+    const target = `${FileSystem.documentDirectory}${filename}`;
+    const sourceLabel = formatDownloadSource(url);
+    const startedAt = Date.now();
+    setUpdateDownload({ downloading: true, progress: 0, stage: fallback ? 'fallback' : 'downloading', sourceLabel, speedBytesPerSecond: 0, remainingSeconds: null, message: fallback ? '正在切换备用下载源' : '正在下载更新包' });
+    const download = FileSystem.createDownloadResumable(url, target, {}, (progress) => {
+      const expected = progress.totalBytesExpectedToWrite || info.apkSize || info.fileSize || 0;
+      const written = progress.totalBytesWritten || 0;
+      const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
+      const speed = written / elapsedSeconds;
+      const remaining = expected > 0 && speed > 0 ? Math.max(0, (expected - written) / speed) : null;
+      const ratio = expected > 0 ? written / expected : 0;
+      setUpdateDownload({
+        downloading: true,
+        progress: Math.max(0, Math.min(1, ratio)),
+        stage: fallback ? 'fallback' : 'downloading',
+        sourceLabel,
+        speedBytesPerSecond: speed,
+        remainingSeconds: remaining,
+        message: `${sourceLabel} · ${formatSpeed(speed)} · 剩余 ${formatRemaining(remaining)}`,
+      });
+    });
+    const result = await download.downloadAsync();
+    if (!result?.uri) throw new Error('download failed');
+    setUpdateDownload({ downloading: true, progress: 1, stage: 'opening', sourceLabel, speedBytesPerSecond: 0, remainingSeconds: 0, message: '下载完成，正在打开安装包' });
+    return result.uri;
+  }
+
   async function handleDownloadUpdate(info?: AppUpdateInfo | null) {
-    const downloadUrl = info?.downloadUrl;
-    if (!downloadUrl) {
+    const primaryUrl = getPreferredApkUrl(info);
+    if (!info || !primaryUrl) {
       showNotice('暂无可下载的安装包');
       return;
     }
     if (Platform.OS === 'web') {
-      openExternalUrl(downloadUrl);
-      return;
-    }
-    if (!FileSystem.documentDirectory) {
-      openExternalUrl(downloadUrl);
+      openExternalUrl(primaryUrl);
       return;
     }
     if (updateDownload.downloading) return;
-    setUpdateDownload({ downloading: true, progress: 0 });
+    const fallbackUrl = getFallbackApkUrl(info);
     try {
-      const filename = `luna-log-v${info.latestVersion}.apk`;
-      const target = `${FileSystem.documentDirectory}${filename}`;
-      const download = FileSystem.createDownloadResumable(downloadUrl, target, {}, (progress) => {
-        const expected = progress.totalBytesExpectedToWrite || 0;
-        const ratio = expected > 0 ? progress.totalBytesWritten / expected : 0;
-        setUpdateDownload({ downloading: true, progress: Math.max(0, Math.min(1, ratio)) });
-      });
-      const result = await download.downloadAsync();
-      setUpdateDownload({ downloading: false, progress: 1 });
-      if (result?.uri && (await Sharing.isAvailableAsync())) {
-        await Sharing.shareAsync(result.uri, { mimeType: 'application/vnd.android.package-archive', dialogTitle: '安装 Luna Log 更新' });
-      } else {
-        openExternalUrl(downloadUrl);
+      let uri = '';
+      try {
+        uri = await downloadUpdateFromUrl(info, primaryUrl, false);
+      } catch (error) {
+        if (!fallbackUrl) throw error;
+        uri = await downloadUpdateFromUrl(info, fallbackUrl, true);
       }
-    } catch {
-      setUpdateDownload({ downloading: false, progress: 0 });
-      Alert.alert('下载失败', '无法下载更新包，请尝试外部下载');
+      setUpdateDownload({ downloading: false, progress: 1, stage: 'done', sourceLabel: formatDownloadSource(primaryUrl), speedBytesPerSecond: 0, remainingSeconds: 0, message: '下载完成' });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/vnd.android.package-archive', dialogTitle: '安装 Luna Log 更新' });
+      } else {
+        openExternalUrl(fallbackUrl || primaryUrl);
+      }
+    } catch (error) {
+      setUpdateDownload({ downloading: false, progress: 0, stage: 'failed', sourceLabel: formatDownloadSource(primaryUrl), speedBytesPerSecond: 0, remainingSeconds: null, message: error instanceof Error ? error.message : '下载失败' });
+      Alert.alert('内置升级失败', '无法下载或打开更新包，请尝试外部下载');
     }
   }
   async function handleCheckUpdate() {
@@ -977,6 +1152,7 @@ export default function App() {
     setFabOpen(false);
     setEditingSexRecord(null);
     setEditingPeriodRecord(null);
+    setEditingPeriodDayRecord(null);
     setEditingSymptomRecord(null);
     setSheetType(type);
   }
@@ -985,6 +1161,7 @@ export default function App() {
     setFabOpen(false);
     setEditingSexRecord(record);
     setEditingPeriodRecord(null);
+    setEditingPeriodDayRecord(null);
     setEditingSymptomRecord(null);
     setSheetType(sexSheetTypeForRecord(record));
   }
@@ -993,14 +1170,26 @@ export default function App() {
     setFabOpen(false);
     setEditingSexRecord(null);
     setEditingPeriodRecord(record);
+    setEditingPeriodDayRecord(null);
     setEditingSymptomRecord(null);
     setSheetType('period');
+  }
+
+  function openPeriodDayEditor(record: PeriodDayRecord | null, dateKey: string) {
+    setFabOpen(false);
+    setSelectedCalendarDate(dateKey);
+    setEditingSexRecord(null);
+    setEditingPeriodRecord(null);
+    setEditingPeriodDayRecord(record);
+    setEditingSymptomRecord(null);
+    setSheetType('periodDay');
   }
 
   function openSymptomEditor(record: SymptomRecord) {
     setFabOpen(false);
     setEditingSexRecord(null);
     setEditingPeriodRecord(null);
+    setEditingPeriodDayRecord(null);
     setEditingSymptomRecord(record);
     setSheetType('symptom');
   }
@@ -1009,6 +1198,7 @@ export default function App() {
     setSheetType(null);
     setEditingSexRecord(null);
     setEditingPeriodRecord(null);
+    setEditingPeriodDayRecord(null);
     setEditingSymptomRecord(null);
   }
 
@@ -1071,6 +1261,7 @@ export default function App() {
                   onPatch={(updater) => patchState(updater)}
                   onAddEntry={openSheet}
                   onEditSex={openSexEditor}
+                  onEditPeriodDay={openPeriodDayEditor}
                 />
               )}
               {loaded && screen === 'insights' && <InsightsScreen state={state} stats={stats} cycleInfo={cycleInfo} range={statsRange} onRangeChange={setStatsRange} />}
@@ -1140,6 +1331,7 @@ export default function App() {
               initialDateKey={screen === 'calendar' ? selectedCalendarDate || toDateKey(new Date()) : null}
               editingSexRecord={editingSexRecord}
               editingPeriodRecord={editingPeriodRecord}
+              editingPeriodDayRecord={editingPeriodDayRecord}
               editingSymptomRecord={editingSymptomRecord}
               onClose={closeSheet}
               onSaveSex={(record) => {
@@ -1159,6 +1351,18 @@ export default function App() {
                     : [...current.periodRecords, record],
                 }));
                 showNotice(editingPeriodRecord ? '已保存修改' : '已保存');
+              }}
+              onSavePeriodDay={(record) => {
+                patchState((current) => {
+                  const withoutSameDate = current.periodDayRecords.filter((item) => item.id === record.id || item.date !== record.date);
+                  return {
+                    ...current,
+                    periodDayRecords: editingPeriodDayRecord
+                      ? withoutSameDate.map((item) => (item.id === record.id ? record : item))
+                      : [...withoutSameDate, record],
+                  };
+                });
+                showNotice(editingPeriodDayRecord ? '已保存当天月经状态' : '已记录当天月经状态');
               }}
               onSaveSymptom={(record) => {
                 patchState((current) => ({
@@ -1320,6 +1524,7 @@ function CalendarScreen({
   onPatch,
   onAddEntry,
   onEditSex,
+  onEditPeriodDay,
 }: {
   state: AppState;
   visibleMonth: Date;
@@ -1330,6 +1535,7 @@ function CalendarScreen({
   onPatch: (updater: (current: AppState) => AppState) => void;
   onAddEntry: (type: Extract<SheetType, 'partneredSex' | 'soloSex'>) => void;
   onEditSex: (record: SexRecord) => void;
+  onEditPeriodDay: (record: PeriodDayRecord | null, dateKey: string) => void;
 }) {
   const days = buildCalendarDays(visibleMonth);
   const monthTitle = monthLabel(visibleMonth);
@@ -1341,6 +1547,7 @@ function CalendarScreen({
   const selectedSexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === toDateKey(selectedDate));
   const selectedInFuture = startOfDay(selectedDate) > startOfDay(new Date());
   const selectedPeriod = findPeriodForDate(state, selectedDate);
+  const selectedPeriodDay = findPeriodDayForDate(state, selectedDate);
   const canMarkPeriodStart = !selectedInFuture && !selectedPeriod;
   const canMarkPeriodEnd = !selectedInFuture && state.periodRecords.some((record) => record.startDate <= toDateKey(selectedDate));
 
@@ -1354,7 +1561,6 @@ function CalendarScreen({
         {
           id: uid('period'),
           startDate: key,
-          endDate: toDateKey(addDays(selectedDate, current.settings.periodDays - 1)),
           flow: 'medium',
           painLevel: 0,
           symptoms: [],
@@ -1380,9 +1586,23 @@ function CalendarScreen({
 
   function cancelSelectedPeriod() {
     if (!selectedPeriod) return;
+    const start = parseDateKey(selectedPeriod.startDate);
+    const end = getPeriodEndDate(state, selectedPeriod);
     onPatch((current) => ({
       ...current,
       periodRecords: current.periodRecords.filter((record) => record.id !== selectedPeriod.id),
+      periodDayRecords: current.periodDayRecords.filter((record) => {
+        const date = parseDateKey(record.date);
+        return date < startOfDay(start) || date > startOfDay(end);
+      }),
+    }));
+  }
+
+  function deleteSelectedPeriodDay() {
+    if (!selectedPeriodDay) return;
+    onPatch((current) => ({
+      ...current,
+      periodDayRecords: current.periodDayRecords.filter((record) => record.id !== selectedPeriodDay.id),
     }));
   }
 
@@ -1437,9 +1657,35 @@ function CalendarScreen({
           </Pressable>
         </View>
         {selectedPeriod && (
-          <Pressable style={styles.dayStatusCancelButton} onPress={cancelSelectedPeriod}>
-            <Text style={styles.dayStatusCancelText}>取消本次经期记录</Text>
-          </Pressable>
+          <View style={styles.daySexSection}>
+            <Text style={styles.daySexTitle}>当天月经状态</Text>
+            {selectedPeriodDay ? (
+              <Pressable style={styles.daySexRow} onPress={() => onEditPeriodDay(selectedPeriodDay, toDateKey(selectedDate))}>
+                <LinearGradient colors={[colors.period, colors.periodLight]} style={styles.daySexIcon}>
+                  <Droplets color="#fff" size={16} strokeWidth={2.6} />
+                </LinearGradient>
+                <View style={styles.daySexCopy}>
+                  <Text style={styles.daySexMain}>{flowLabel(selectedPeriodDay.flow)} · 痛经 {selectedPeriodDay.painLevel || 0}/5</Text>
+                  <Text style={styles.daySexMeta}>{[...selectedPeriodDay.symptoms, selectedPeriodDay.notes].filter(Boolean).join(' · ') || '已记录当天状态'}</Text>
+                </View>
+                <Pencil color={colors.primary} size={15} strokeWidth={2.5} />
+              </Pressable>
+            ) : (
+              <Text style={styles.daySexEmpty}>这一天还没有记录经量、痛经和症状</Text>
+            )}
+            <View style={styles.daySexQuickActions}>
+              <Pressable style={[styles.daySexQuickButton, styles.periodDayButton]} onPress={() => onEditPeriodDay(selectedPeriodDay, toDateKey(selectedDate))}>
+                <Droplets color={colors.period} size={15} strokeWidth={2.7} />
+                <Text style={styles.periodDayButtonText}>{selectedPeriodDay ? '编辑当天状态' : '记录当天状态'}</Text>
+              </Pressable>
+              {selectedPeriodDay && (
+                <Pressable style={[styles.daySexQuickButton, styles.periodDayDeleteButton]} onPress={deleteSelectedPeriodDay}>
+                  <Trash2 color={colors.danger} size={15} strokeWidth={2.7} />
+                  <Text style={styles.periodDayDeleteButtonText}>删除当天状态</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
         )}
         <View style={styles.daySexSection}>
           <Text style={styles.daySexTitle}>当天性生活</Text>
@@ -1795,7 +2041,7 @@ function AboutScreen({
   onClose: () => void;
   onCheckUpdate: () => void;
   onDownloadUpdate: () => void;
-  updateDownload: { downloading: boolean; progress: number };
+  updateDownload: UpdateDownloadState;
   onOpenUrl: (url?: string) => void;
 }) {
   if (!visible) return null;
@@ -1816,7 +2062,9 @@ function AboutScreen({
       : updateInfo?.status === 'failed'
         ? styles.updateStatusFailed
         : styles.updateStatusLatest;
-  const primaryUrl = updateInfo?.downloadUrl || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
+  const primaryUrl = getPreferredApkUrl(updateInfo) || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
+  const externalUrl = updateInfo?.apkUrl || updateInfo?.downloadUrl || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
+  const downloadSource = formatDownloadSource(primaryUrl);
 
   return (
     <View style={styles.aboutOverlay}>
@@ -1865,7 +2113,7 @@ function AboutScreen({
             <UpdateMeta label="当前版本" value={`v${APP_VERSION}`} />
             <UpdateMeta label="最新版本" value={updateInfo ? `v${updateInfo.latestVersion}` : '--'} />
             <UpdateMeta label="发布日期" value={formatUpdateDate(updateInfo?.releaseDate)} />
-            <UpdateMeta label="安装包" value={formatFileSize(updateInfo?.fileSize)} />
+            <UpdateMeta label="安装包" value={formatFileSize(updateInfo?.apkSize || updateInfo?.fileSize)} />
           </View>
 
           {updateInfo && (
@@ -1875,6 +2123,17 @@ function AboutScreen({
                 {updateInfo.sourceName ? `${updateInfo.sourceName} · ` : ''}
                 {formatCheckedAt(updateInfo.checkedAt)}
               </Text>
+              {updateInfo.status === 'available' && (
+                <Text style={styles.updateDetailMeta}>内置升级源：{downloadSource}</Text>
+              )}
+              {updateDownload.downloading && (
+                <View style={styles.updateProgressBox}>
+                  <View style={styles.updateProgressTrack}>
+                    <View style={[styles.updateProgressFill, { width: `${Math.round(updateDownload.progress * 100)}%` }]} />
+                  </View>
+                  <Text style={styles.updateDetailMeta}>{updateDownload.message || `下载中 ${Math.round(updateDownload.progress * 100)}%`}</Text>
+                </View>
+              )}
               {updateInfo.notes.map((note) => (
                 <View key={note} style={styles.releaseBulletRow}>
                   <View style={styles.releaseBulletDot} />
@@ -1885,26 +2144,21 @@ function AboutScreen({
           )}
 
           <View style={styles.updateActionRow}>
-            <Pressable style={[styles.updateActionButton, styles.updateActionPrimary]} onPress={onCheckUpdate} disabled={checking}>
+            <Pressable style={[styles.updateActionButton, styles.updateActionPrimary]} onPress={onCheckUpdate} disabled={checking || updateDownload.downloading}>
               {checking ? <ActivityIndicator color="#fff" size="small" /> : <RefreshCw color="#fff" size={17} strokeWidth={2.7} />}
               <Text style={styles.updateActionPrimaryText}>{checking ? '检查中' : '检查'}</Text>
             </Pressable>
-            {updateInfo?.status === 'available' && updateInfo.downloadUrl && (
+            {updateInfo?.status === 'available' && primaryUrl && (
               <Pressable style={styles.updateActionButton} onPress={onDownloadUpdate} disabled={updateDownload.downloading}>
                 {updateDownload.downloading ? <ActivityIndicator color={colors.primary} size="small" /> : <Download color={colors.primary} size={17} strokeWidth={2.7} />}
-                <Text style={styles.updateActionText}>{updateDownload.downloading ? `下载中 ${Math.round(updateDownload.progress * 100)}%` : '内置下载'}</Text>
+                <Text style={styles.updateActionText}>{updateDownload.downloading ? `${Math.round(updateDownload.progress * 100)}%` : '内置升级'}</Text>
               </Pressable>
             )}
-            <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(primaryUrl)}>
-              {updateInfo?.status === 'available' ? (
-                <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
-              ) : (
-                <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
-              )}
+            <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(externalUrl)}>
+              <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
               <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '外部下载' : '项目主页'}</Text>
             </Pressable>
-          </View>
-          {diagnostics.length > 0 && (
+          </View>          {diagnostics.length > 0 && (
             <View style={styles.updateDiagnostics}>
               <Text style={styles.updateDiagnosticsTitle}>来源诊断</Text>
               {diagnostics.map((item) => (
@@ -1956,16 +2210,23 @@ function UpdateMeta({ label, value }: { label: string; value: string }) {
   );
 }
 
+function normalizeProtectionSelection(record?: Pick<SexRecord, 'protectionMethods' | 'protection'> | null) {
+  const first = record?.protectionMethods?.[0] || record?.protection || '';
+  return first ? [first] : [];
+}
+
 function EntrySheet({
   state,
   type,
   initialDateKey,
   editingSexRecord,
   editingPeriodRecord,
+  editingPeriodDayRecord,
   editingSymptomRecord,
   onClose,
   onSaveSex,
   onSavePeriod,
+  onSavePeriodDay,
   onSaveSymptom,
 }: {
   state: AppState;
@@ -1973,10 +2234,12 @@ function EntrySheet({
   initialDateKey?: string | null;
   editingSexRecord?: SexRecord | null;
   editingPeriodRecord?: PeriodRecord | null;
+  editingPeriodDayRecord?: PeriodDayRecord | null;
   editingSymptomRecord?: SymptomRecord | null;
   onClose: () => void;
   onSaveSex: (record: SexRecord) => void;
   onSavePeriod: (record: PeriodRecord) => void;
+  onSavePeriodDay: (record: PeriodDayRecord) => void;
   onSaveSymptom: (record: SymptomRecord) => void;
 }) {
   const [date, setDate] = useState(toDateKey(new Date()));
@@ -2018,9 +2281,7 @@ function EntrySheet({
       setDuration(editingSexRecord.durationMinutes ? String(editingSexRecord.durationMinutes) : '');
       setPartnerAlias(editingSexRecord.partnerAlias || '');
       setSexTypes(editingSexRecord.sexTypes?.length ? editingSexRecord.sexTypes : editingSexRecord.sexType ? [editingSexRecord.sexType] : []);
-      setProtectionMethods(
-        editingSexRecord.protectionMethods?.length ? editingSexRecord.protectionMethods : editingSexRecord.protection ? [editingSexRecord.protection] : []
-      );
+      setProtectionMethods(normalizeProtectionSelection(editingSexRecord));
       setPlace(editingSexRecord.place || '');
       setMood(editingSexRecord.mood || '');
       setSatisfaction(editingSexRecord.satisfaction ? String(editingSexRecord.satisfaction) : '');
@@ -2046,6 +2307,15 @@ function EntrySheet({
       setPain(String(editingPeriodRecord.painLevel || 0));
       setSymptoms(editingPeriodRecord.symptoms || []);
       setNotes(editingPeriodRecord.notes || '');
+      return;
+    }
+
+    if (type === 'periodDay' && editingPeriodDayRecord) {
+      setDate(editingPeriodDayRecord.date);
+      setFlow(editingPeriodDayRecord.flow || 'medium');
+      setPain(String(editingPeriodDayRecord.painLevel || 0));
+      setSymptoms(editingPeriodDayRecord.symptoms || []);
+      setNotes(editingPeriodDayRecord.notes || '');
       return;
     }
 
@@ -2093,8 +2363,8 @@ function EntrySheet({
     if (type === 'partneredSex' && latestSexRecord) {
       setMood(latestSexRecord.mood || '');
       setPositions(latestSexRecord.positions || []);
-      setProtectionMethods(latestSexRecord.protectionMethods?.length ? latestSexRecord.protectionMethods : latestSexRecord.protection ? [latestSexRecord.protection] : []);
-      setPrefillUsed(Boolean(latestSexRecord.mood || latestSexRecord.positions?.length || latestSexRecord.protectionMethods?.length || latestSexRecord.protection));
+      setProtectionMethods(normalizeProtectionSelection(latestSexRecord));
+      setPrefillUsed(Boolean(latestSexRecord.mood || latestSexRecord.positions?.length || normalizeProtectionSelection(latestSexRecord).length));
     } else if (type === 'soloSex' && latestSexRecord) {
       setMood(latestSexRecord.mood || '');
       setSoloTools(latestSexRecord.soloTools?.length ? latestSexRecord.soloTools : ['Hand Job']);
@@ -2105,6 +2375,13 @@ function EntrySheet({
         setSymptoms(latestPeriod.symptoms || []);
         setPrefillUsed(Boolean(latestPeriod.symptoms?.length));
       }
+    } else if (type === 'periodDay') {
+      const latestPeriodDay = [...state.periodDayRecords].sort((left, right) => right.date.localeCompare(left.date))[0];
+      if (latestPeriodDay) {
+        setSymptoms(latestPeriodDay.symptoms || []);
+        setFlow(latestPeriodDay.flow || 'medium');
+        setPrefillUsed(Boolean(latestPeriodDay.symptoms?.length || latestPeriodDay.flow));
+      }
     } else if (type === 'symptom') {
       const latestSymptom = [...state.symptomRecords].sort((left, right) => right.date.localeCompare(left.date))[0];
       if (latestSymptom) {
@@ -2112,7 +2389,7 @@ function EntrySheet({
         setPrefillUsed(Boolean(latestSymptom.symptoms?.length));
       }
     }
-  }, [type, initialDateKey, editingSexRecord, editingPeriodRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.symptomRecords]);
+  }, [type, initialDateKey, editingSexRecord, editingPeriodRecord, editingPeriodDayRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.periodDayRecords, state.symptomRecords]);
 
   function toggleSymptom(value: string) {
     setSymptoms((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
@@ -2144,7 +2421,7 @@ function EntrySheet({
         count: Math.max(1, Math.min(99, Number(count) || 1)),
         durationMinutes: duration ? Number(duration) : undefined,
         partnerAlias: partnerAlias.trim(),
-        protectionMethods,
+        protectionMethods: protectionMethods.slice(0, 1),
         sexTypes: normalizedSexTypes,
         place: place.trim(),
         mood: mood.trim(),
@@ -2174,6 +2451,16 @@ function EntrySheet({
         notes: notes.trim(),
       });
     }
+    if (type === 'periodDay') {
+      onSavePeriodDay({
+        id: editingPeriodDayRecord?.id || uid('period-day'),
+        date,
+        flow,
+        painLevel: Number(pain) || 0,
+        symptoms,
+        notes: notes.trim(),
+      });
+    }
     if (type === 'symptom') {
       onSaveSymptom({
         id: editingSymptomRecord?.id || uid('symptom'),
@@ -2188,9 +2475,9 @@ function EntrySheet({
 
   const sexMode = isSexSheet(type) ? type : null;
   const typeMeta = type ? getSheetMeta(type) : recordMeta.sex;
-  const sheetShort = sexMode ? '亲密生活' : type === 'period' || type === 'symptom' ? recordMeta[type].short : recordMeta.sex.short;
-  const editingRecord = Boolean(editingSexRecord || editingPeriodRecord || editingSymptomRecord);
-  const symptomOptions = type === 'period' ? ['腹痛', '腰痛', '头痛', '疲劳', '乳房胀痛'] : ['分泌物变化', '腹胀', '疲劳', '失眠', '情绪波动'];
+  const sheetShort = sexMode ? '亲密生活' : type === 'periodDay' ? '月经状态' : type === 'period' || type === 'symptom' ? recordMeta[type].short : recordMeta.sex.short;
+  const editingRecord = Boolean(editingSexRecord || editingPeriodRecord || editingPeriodDayRecord || editingSymptomRecord);
+  const symptomOptions = type === 'period' || type === 'periodDay' ? ['腹痛', '腰痛', '头痛', '疲劳', '乳房胀痛'] : ['分泌物变化', '腹胀', '疲劳', '失眠', '情绪波动'];
 
   return (
     <Modal visible={Boolean(type)} transparent animationType="slide" onRequestClose={onClose}>
@@ -2285,7 +2572,7 @@ function EntrySheet({
             )}
             {sexMode && <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />}
             {type === 'period' && <DatePickerField label="结束日期" value={periodEnd || date} onChange={setPeriodEnd} />}
-            {type === 'period' && (
+            {(type === 'period' || type === 'periodDay') && (
               <View style={styles.sheetChipGroup}>
                 {[
                   ['light', '少'],
@@ -2299,7 +2586,7 @@ function EntrySheet({
               </View>
             )}
             {!sexMode && (
-              <OptionSection label={type === 'period' ? '痛经程度' : '强度'}>
+              <OptionSection label={type === 'period' || type === 'periodDay' ? '痛经程度' : '强度'}>
                 <ScalePicker value={Number(pain) || 0} onChange={(next) => setPain(String(next))} />
               </OptionSection>
             )}
@@ -2406,6 +2693,7 @@ function NavItem({ active, label, Icon, onPress }: { active: boolean; label: str
 function getSheetMeta(type: SheetType) {
   if (type === 'partneredSex') return { label: '做爱', Icon: HeartHandshake, colors: [colors.sex, colors.primary] as const };
   if (type === 'soloSex') return { label: '自慰', Icon: Sparkles, colors: [colors.primary, colors.secondary] as const };
+  if (type === 'periodDay') return { label: '当天月经状态', Icon: Droplets, colors: [colors.period, colors.periodLight] as const };
   return recordMeta[type];
 }
 
@@ -3640,12 +3928,32 @@ function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period'
   return null;
 }
 
+function getPeriodEndDate(state: AppState, record: PeriodRecord) {
+  const start = parseDateKey(record.startDate);
+  const defaultEnd = addDays(start, initialState.settings.periodDays - 1);
+  const currentEnd = addDays(start, state.settings.periodDays - 1);
+  if (!record.endDate) return currentEnd;
+  const storedEnd = parseDateKey(record.endDate);
+  return toDateKey(storedEnd) === toDateKey(defaultEnd) ? currentEnd : storedEnd;
+}
+
 function findPeriodForDate(state: AppState, date: Date) {
   return state.periodRecords.find((record) => {
     const start = parseDateKey(record.startDate);
-    const end = record.endDate ? parseDateKey(record.endDate) : addDays(start, state.settings.periodDays - 1);
+    const end = getPeriodEndDate(state, record);
     return startOfDay(date) >= startOfDay(start) && startOfDay(date) <= startOfDay(end);
   });
+}
+
+function findPeriodDayForDate(state: AppState, date: Date) {
+  const key = toDateKey(date);
+  return state.periodDayRecords.find((record) => record.date === key) || null;
+}
+
+function flowLabel(flow?: string) {
+  if (flow === 'light') return '流量少';
+  if (flow === 'heavy') return '流量多';
+  return '流量中';
 }
 
 function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
@@ -3658,7 +3966,7 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
   const realPeriod = findPeriodForDate(state, date);
   if (realPeriod) {
     const periodDay = daysBetween(parseDateKey(realPeriod.startDate), day) + 1;
-    const end = realPeriod.endDate ? parseDateKey(realPeriod.endDate) : addDays(parseDateKey(realPeriod.startDate), state.settings.periodDays - 1);
+    const end = getPeriodEndDate(state, realPeriod);
     return {
       title: `月经期第 ${periodDay} 天`,
       detail: `本次经期预计到 ${shortDate(end)}。可在这里标记开始或结束来校准预测。`,
@@ -3882,6 +4190,7 @@ function buildSymptomCounts(state: AppState) {
   const counts = new Map<string, number>();
   const add = (name: string) => counts.set(name, (counts.get(name) || 0) + 1);
   state.periodRecords.forEach((record) => record.symptoms.forEach(add));
+  state.periodDayRecords.forEach((record) => record.symptoms.forEach(add));
   state.symptomRecords.forEach((record) => record.symptoms.forEach(add));
   return Array.from(counts.entries()).sort((left, right) => right[1] - left[1]);
 }
@@ -4503,7 +4812,24 @@ function createStyles(theme: ThemePalette) {
     backgroundColor: '#2f80ed',
     borderColor: '#2f80ed',
   },
-  daySexQuickButtonText: {
+  periodDayButton: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.periodLight,
+  },
+  periodDayButtonText: {
+    color: colors.period,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  periodDayDeleteButton: {
+    backgroundColor: colors.dangerSoft,
+    borderColor: colors.dangerSoft,
+  },
+  periodDayDeleteButtonText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '900',
+  },  daySexQuickButtonText: {
     color: colors.primary,
     fontSize: 12,
     fontWeight: '900',
@@ -5163,6 +5489,21 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 11,
     fontWeight: '800',
+  },
+  updateProgressBox: {
+    gap: 7,
+    marginTop: 8,
+  },
+  updateProgressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: colors.soft,
+  },
+  updateProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.primary,
   },
   updateActionRow: {
     flexDirection: 'row',

@@ -1,14 +1,20 @@
 {
-  "version": "1.0.3",
-  "releaseDate": "2026-07-06",
-  "title": "Luna Log icon assets and recording experience update",
-  "highlights": [
-    "日历支持按选中日期快速添加做爱和自慰记录",
-    "保护措施改为单选，并使用 Aphrodite 风格截图图标",
-    "姿势、自慰道具和心情图标统一尺寸与视觉风格",
-    "更新 Android versionCode 到 4，支持从 1.0.2 正常升级安装"
-  ],
-  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.3/luna-log-v1.0.3-release.apk",
-  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.3",
-  "mandatory": false
+    "version":  "1.0.4",
+    "releaseDate":  "2026-07-07",
+    "publishedAt":  "2026-07-07T00:00:00Z",
+    "title":  "Luna Log period day status and built-in updater improvements",
+    "highlights":  [
+                       "Added daily menstrual status records for flow, cramps, symptoms and notes.",
+                       "Built-in updater now checks multiple sources and retries a fallback APK source.",
+                       "Updater shows download source, progress, speed and remaining time.",
+                       "Android versionCode is 5, supporting upgrades from 1.0.3."
+                   ],
+    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.4/luna-log-v1.0.4-release.apk",
+    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.4/luna-log-v1.0.4-release.apk",
+    "mirrorApkUrl":  "https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/downloads/luna-log-v1.0.4-release.apk",
+    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.4",
+    "apkName":  "luna-log-v1.0.4-release.apk",
+    "apkSize":  76650307,
+    "apkSha256":  "0acb5fe2973298adfe503f0cb9aab3ef4982f54c4b03060ca54d8f7de425675c",
+    "mandatory":  false
 }
