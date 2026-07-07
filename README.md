@@ -25,11 +25,10 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 
 ## 1.0.5 更新
 
-- 修复内置升级下载一直停在 0% 后失败的问题：优先使用 Gitee 国内镜像，GitHub Release 作为兜底。
+- 修复内置升级下载一直停在 0% 后失败的问题：优先读取 Gitee 国内镜像清单，APK 下载使用 GitHub Release。
 - 修复日历日期和星期标题不对齐、真机上一行只显示 6 个日期的问题。
 - 日历改为按周固定 7 列渲染，星期标题和日期格使用一致的列间距。
 - Android `versionCode` 更新到 `6`，支持从 `1.0.4` 正常升级安装。
-- 增加 `downloads/` APK 镜像文件，便于 Gitee raw 直接下载。
 
 ## 1.0.4 更新
 
@@ -53,11 +52,6 @@ Android APK：
 https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk
 ```
 
-Gitee 国内镜像：
-
-```text
-https://gitee.com/ysjugg/luna-log/raw/master/downloads/luna-log-v1.0.5-release.apk
-```
 
 APK 校验：
 

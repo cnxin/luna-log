@@ -4,14 +4,14 @@
     "publishedAt":  "2026-07-07T00:00:00Z",
     "title":  "Luna Log 1.0.5：内置下载和日历网格修复",
     "highlights":  [
-                       "内置升级优先使用 Gitee 国内镜像下载 APK，GitHub Release 作为兜底入口。",
-                       "更新清单写入 Gitee raw 镜像地址，减少 GitHub 网络不稳定导致的下载失败。",
+                       "内置升级优先读取 Gitee 国内镜像清单，APK 下载使用 GitHub Release 入口。",
+                       "Gitee 保留代码和更新清单镜像，避免 GitHub raw 清单不稳定导致无法检查更新。",
                        "日历改为按周固定 7 列渲染，修复日期只显示 6 列和星期标题不对齐的问题。",
                        "Android versionCode 更新到 6，支持从 1.0.4 正常升级安装。"
                    ],
     "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
     "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.5/luna-log-v1.0.5-release.apk",
-    "mirrorApkUrl":  "https://gitee.com/ysjugg/luna-log/raw/master/downloads/luna-log-v1.0.5-release.apk",
+    "mirrorApkUrl":  "",
     "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.5",
     "apkName":  "luna-log-v1.0.5-release.apk",
     "apkSize":  76650719,
