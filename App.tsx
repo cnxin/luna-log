@@ -244,7 +244,7 @@ type UpdateDownloadState = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.6';
+const APP_VERSION = '1.0.7';
 const ANDROID_PACKAGE_NAME = 'com.anonymous.lunalog';
 const APK_MIME_TYPE = 'application/vnd.android.package-archive';
 const FLAG_GRANT_READ_URI_PERMISSION = 1;
@@ -280,6 +280,16 @@ const UPDATE_SOURCES: UpdateSource[] = [
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.7',
+    date: '2026-07-07',
+    title: '修复 Android App 图标资源',
+    highlights: [
+      '重新生成 Android 原生启动图标资源，安装包会显示新的月相三态图标',
+      '保留内置更新直接拉起系统安装器的修复',
+      '更新 Android versionCode 到 8，支持从 1.0.6 正常升级安装',
+    ],
+  },
   {
     version: '1.0.4',
     date: '2026-07-07',
