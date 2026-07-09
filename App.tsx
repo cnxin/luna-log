@@ -246,7 +246,7 @@ type UpdateDownloadState = {
 
 const today = new Date();
 const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.8';
+const APP_VERSION = '1.0.10';
 const ANDROID_PACKAGE_NAME = 'com.anonymous.lunalog';
 const APK_MIME_TYPE = 'application/vnd.android.package-archive';
 const FLAG_GRANT_READ_URI_PERMISSION = 1;
@@ -283,6 +283,17 @@ const UPDATE_SOURCES: UpdateSource[] = [
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.0.10',
+    date: '2026-07-09',
+    title: '版本同步和日历隐私优化',
+    highlights: [
+      '同步应用内版本常量，关于页会正确显示当前安装版本',
+      '更新 Android versionCode 到 11，支持从 1.0.9 正常升级安装',
+      '修正内置更新判断，避免已安装新包后仍显示旧版本',
+      '日历中的亲密记录入口改为隐私化文案，并通过选择弹窗区分记录类型',
+    ],
+  },
+  {
     version: '1.0.8',
     date: '2026-07-07',
     title: '优化 App 图标安全边距',
@@ -313,17 +324,19 @@ const RELEASE_NOTES: ReleaseNote[] = [
       '更新清单兼容 apkUrl、mirrorApkUrl、apkName、apkSize 和 apkSha256 字段',
       '更新 Android versionCode 到 5，支持从 1.0.3 正常升级安装',
     ],
-  },  {
+  },
+  {
     version: '1.0.3',
     date: '2026-07-06',
     title: '图标素材和记录体验优化',
     highlights: [
-      '日历新增按选中日期快速添加做爱和自慰记录',
+      '日历新增按选中日期快速添加亲密记录',
       '保护措施改为单选，并使用 Aphrodite 风格截图图标',
       '姿势、自慰道具和心情图标统一尺寸与视觉风格',
       '更新 Android versionCode 到 4，支持从 1.0.2 正常升级安装',
     ],
-  },  {
+  },
+  {
     version: '1.0.2',
     date: '2026-07-06',
     title: '数据备份、内置更新和体验优化',
@@ -339,7 +352,7 @@ const RELEASE_NOTES: ReleaseNote[] = [
     title: '移动端 Demo 和记录体验',
     highlights: [
       '完成手机壳预览、首页、日历、统计和设置四个主界面',
-      '做爱和自慰拆分为独立入口，并补充 Aphrodite 风格的记录项',
+      '亲密记录拆分为伴侣亲密和个人亲密入口，并补充 Aphrodite 风格的记录项',
       '日历支持经期、易孕期和亲密记录标记，统计支持周/月/年查看',
       '加入原版、薄荷、蓝色三套 LifeLog 风格视觉主题',
     ],
@@ -527,7 +540,7 @@ const themeOptions: Array<{ value: ThemeStyle; label: string; hint: string }> = 
 
 function buildRecordMeta(theme: ThemePalette): Record<RecordType, { label: string; short: string; Icon: LucideIcon; colors: readonly [string, string] }> {
   return {
-    sex: { label: '性生活', short: '亲密生活', Icon: HeartHandshake, colors: [theme.sex, theme.primary] },
+    sex: { label: '亲密记录', short: '亲密生活', Icon: HeartHandshake, colors: [theme.sex, theme.primary] },
     period: { label: '月经', short: '周期', Icon: Droplet, colors: [theme.period, theme.periodLight] },
     symptom: { label: '症状', short: '身体状态', Icon: Sparkles, colors: [theme.gold, theme.secondary] },
   };
@@ -538,8 +551,8 @@ let recordMeta = buildRecordMeta(colors);
 function getSexKindMeta(record: SexRecord | null | undefined) {
   const solo = record ? isSoloSexRecord(record) : false;
   return solo
-    ? { label: '自慰', Icon: Sparkles, color: colors.primary, colors: [colors.primary, colors.secondary] as const }
-    : { label: '做爱', Icon: HeartHandshake, color: colors.sex, colors: [colors.sex, colors.primary] as const };
+    ? { label: '个人亲密', Icon: Sparkles, color: colors.primary, colors: [colors.primary, colors.secondary] as const }
+    : { label: '伴侣亲密', Icon: HeartHandshake, color: colors.sex, colors: [colors.sex, colors.primary] as const };
 }
 
 function addDays(date: Date, amount: number) {
@@ -1647,6 +1660,7 @@ function CalendarScreen({
   onEditPeriodDay: (record: PeriodDayRecord | null, dateKey: string) => void;
 }) {
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
+  const [intimacyPickerOpen, setIntimacyPickerOpen] = useState(false);
   const days = buildCalendarDays(visibleMonth);
   const calendarWeeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => days.slice(index * 7, index * 7 + 7));
   const monthTitle = monthLabel(visibleMonth);
@@ -1750,6 +1764,11 @@ function CalendarScreen({
     }));
   }
 
+  function addIntimacyEntry(nextType: Extract<SheetType, 'partneredSex' | 'soloSex'>) {
+    setIntimacyPickerOpen(false);
+    onAddEntry(nextType);
+  }
+
   return (
     <View>
       <View style={styles.calendarShell}>
@@ -1813,9 +1832,41 @@ function CalendarScreen({
         }}
       />
 
+      <Modal visible={intimacyPickerOpen} transparent animationType="fade" onRequestClose={() => setIntimacyPickerOpen(false)}>
+        <View style={styles.monthYearModalRoot}>
+          <Pressable style={styles.monthYearBackdrop} onPress={() => setIntimacyPickerOpen(false)} />
+          <View style={styles.intimacyPickerPanel}>
+            <Text style={styles.monthYearTitle}>添加亲密记录</Text>
+            <Text style={styles.intimacyPickerHint}>{shortDate(selectedDate)} · 选择记录类型</Text>
+            <Pressable style={styles.intimacyPickerOption} onPress={() => addIntimacyEntry('partneredSex')}>
+              <LinearGradient colors={[colors.sex, colors.primary]} style={styles.intimacyPickerIcon}>
+                <HeartHandshake color="#fff" size={19} strokeWidth={2.7} />
+              </LinearGradient>
+              <View style={styles.intimacyPickerCopy}>
+                <Text style={styles.intimacyPickerTitle}>伴侣亲密</Text>
+                <Text style={styles.intimacyPickerText}>记录双方互动、时长、心情和备注</Text>
+              </View>
+              <ChevronRight color={colors.sub} size={18} strokeWidth={2.6} />
+            </Pressable>
+            <Pressable style={styles.intimacyPickerOption} onPress={() => addIntimacyEntry('soloSex')}>
+              <LinearGradient colors={[colors.primary, colors.secondary]} style={styles.intimacyPickerIcon}>
+                <Sparkles color="#fff" size={19} strokeWidth={2.7} />
+              </LinearGradient>
+              <View style={styles.intimacyPickerCopy}>
+                <Text style={styles.intimacyPickerTitle}>个人亲密</Text>
+                <Text style={styles.intimacyPickerText}>记录独处时刻、时长、心情和备注</Text>
+              </View>
+              <ChevronRight color={colors.sub} size={18} strokeWidth={2.6} />
+            </Pressable>
+            <Pressable style={styles.monthYearGhostButton} onPress={() => setIntimacyPickerOpen(false)}>
+              <Text style={styles.monthYearGhostText}>取消</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.legendRowBottom}>
-        <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
-        <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
+        <IconLegend color={colors.sex} Icon={HeartHandshake} label="伴侣亲密" />
+        <IconLegend color={colors.primary} Icon={Sparkles} label="个人亲密" />
         <IconLegend color="#ff7043" Icon={Droplet} label="经期" />
         <IconLegend color="#ffd4e4" Icon={Activity} label="易孕" />
       </View>
@@ -1900,11 +1951,12 @@ function CalendarScreen({
           </View>
         )}
         <View style={styles.daySexSection}>
-          <Text style={styles.daySexTitle}>当天性生活</Text>
+          <Text style={styles.daySexTitle}>当天亲密记录</Text>
           {selectedSexRecords.length ? (
             selectedSexRecords.map((record) => {
               const kind = getSexKindMeta(record);
               const KindIcon = kind.Icon;
+              const privateMeta = [record.durationMinutes ? `${record.durationMinutes} 分钟` : '', record.mood ? `心情 ${record.mood}` : '', '点开查看或编辑'].filter(Boolean).join(' · ');
               return (
                 <Pressable style={styles.daySexRow} key={record.id} onPress={() => onEditSex(record)}>
                   <LinearGradient colors={kind.colors} style={styles.daySexIcon}>
@@ -1912,27 +1964,19 @@ function CalendarScreen({
                   </LinearGradient>
                   <View style={styles.daySexCopy}>
                     <Text style={styles.daySexMain}>{new Date(record.dateTime).toTimeString().slice(0, 5)} · {kind.label} · {record.count} 次</Text>
-                    <Text style={styles.daySexMeta}>
-                      {[record.sexTypes?.join('、') || record.sexType, record.durationMinutes ? `${record.durationMinutes} 分钟` : '', record.protectionMethods?.join('、') || record.protection]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Text>
+                    <Text style={styles.daySexMeta}>{privateMeta}</Text>
                   </View>
                   <Pencil color={colors.primary} size={15} strokeWidth={2.5} />
                 </Pressable>
               );
             })
           ) : (
-            <Text style={styles.daySexEmpty}>这一天还没有性生活记录</Text>
+            <Text style={styles.daySexEmpty}>这一天还没有亲密记录</Text>
           )}
           <View style={styles.daySexQuickActions}>
-            <Pressable style={[styles.daySexQuickButton, styles.daySexQuickButtonPrimary]} onPress={() => onAddEntry('partneredSex')}>
+            <Pressable style={[styles.daySexQuickButton, styles.daySexQuickButtonPrimary]} onPress={() => setIntimacyPickerOpen(true)}>
               <HeartHandshake color="#fff" size={15} strokeWidth={2.7} />
-              <Text style={[styles.daySexQuickButtonText, styles.daySexQuickButtonTextPrimary]}>添加做爱</Text>
-            </Pressable>
-            <Pressable style={styles.daySexQuickButton} onPress={() => onAddEntry('soloSex')}>
-              <Sparkles color={colors.primary} size={15} strokeWidth={2.7} />
-              <Text style={styles.daySexQuickButtonText}>添加自慰</Text>
+              <Text style={[styles.daySexQuickButtonText, styles.daySexQuickButtonTextPrimary]}>添加亲密记录</Text>
             </Pressable>
           </View>
         </View>
@@ -1961,7 +2005,7 @@ function InsightsScreen({
       <View style={styles.panel}>
         <BarChart3 size={44} color={colors.sub} strokeWidth={1.9} />
         <Text style={styles.emptyTitle}>记录还不够</Text>
-        <Text style={styles.insightHint}>再记录几次性生活后将显示趋势、时长和时间分布</Text>
+        <Text style={styles.insightHint}>再记录几次亲密记录后将显示趋势、时长和时间分布</Text>
       </View>
     );
   }  const chart = buildSexChart(state, range);
@@ -2019,8 +2063,8 @@ function InsightsScreen({
           </View>
         </View>
         <View style={styles.chartLegendRow}>
-          <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
-          <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
+          <IconLegend color={colors.sex} Icon={HeartHandshake} label="伴侣亲密" />
+          <IconLegend color={colors.primary} Icon={Sparkles} label="个人亲密" />
         </View>
       </View>
       <Panel title="持续时间">
@@ -2660,7 +2704,7 @@ function EntrySheet({
             {sexMode && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
             {sexMode && <TextField label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
             {sexMode === 'partneredSex' && <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />}
-            {sexMode && <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次性生活发生的地点" />}
+            {sexMode && <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />}
             {sexMode === 'partneredSex' && (
               <OptionSection label="高潮信息">
                 <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
@@ -2892,15 +2936,15 @@ function NavItem({ active, label, Icon, onPress }: { active: boolean; label: str
 }
 
 function getSheetMeta(type: SheetType) {
-  if (type === 'partneredSex') return { label: '做爱', Icon: HeartHandshake, colors: [colors.sex, colors.primary] as const };
-  if (type === 'soloSex') return { label: '自慰', Icon: Sparkles, colors: [colors.primary, colors.secondary] as const };
+  if (type === 'partneredSex') return { label: '伴侣亲密', Icon: HeartHandshake, colors: [colors.sex, colors.primary] as const };
+  if (type === 'soloSex') return { label: '个人亲密', Icon: Sparkles, colors: [colors.primary, colors.secondary] as const };
   if (type === 'periodDay') return { label: '当天月经状态', Icon: Droplets, colors: [colors.period, colors.periodLight] as const };
   return recordMeta[type];
 }
 
 function getPrivateSheetLabel(type: SheetType) {
-  if (type === 'partneredSex') return '亲密';
-  if (type === 'soloSex') return '独处';
+  if (type === 'partneredSex') return '伴侣亲密';
+  if (type === 'soloSex') return '个人亲密';
   if (type === 'period') return '周期';
   if (type === 'symptom') return '状态';
   return '记录';
@@ -2908,7 +2952,7 @@ function getPrivateSheetLabel(type: SheetType) {
 function FabMenuItem({ primary, type, desc, privacy, onPress }: { primary?: boolean; type: SheetType; desc: string; privacy?: boolean; onPress: () => void }) {
   const meta = getSheetMeta(type);
   const Icon = meta.Icon;
-  const label = privacy ? getPrivateSheetLabel(type) : `${meta.label}记录`;
+  const label = privacy ? getPrivateSheetLabel(type) : isSexSheet(type) ? meta.label : `${meta.label}记录`;
   return (
     <Pressable style={[styles.fabMenuItem, primary && styles.fabMenuItemPrimary]} onPress={onPress}>
       <LinearGradient colors={primary ? meta.colors : [colors.soft, 'rgba(255,255,255,0.68)']} style={styles.fabMenuIcon}>
@@ -4230,15 +4274,11 @@ function buildTimeline(state: AppState): TimelineItem[] {
       id: record.id,
       type: 'sex',
       date: new Date(record.dateTime),
-      title: `性生活 ${record.count || 1} 次`,
+      title: `${isSoloSexRecord(record) ? '个人亲密' : '伴侣亲密'} ${record.count || 1} 次`,
       meta: [
         dateTimeLabel(record.dateTime),
-        record.sexTypes?.length ? record.sexTypes.join('、') : record.sexType || '',
-        record.partnerAlias ? `伴侣 ${record.partnerAlias}` : '',
         record.durationMinutes ? `${record.durationMinutes} 分钟` : '',
-        record.protectionMethods?.length ? `保护 ${record.protectionMethods.join('、')}` : record.protection ? `保护 ${record.protection}` : '',
-        record.place ? `地点 ${record.place}` : '',
-        record.mood ? `情绪 ${record.mood}` : '',
+        record.mood ? `心情 ${record.mood}` : '',
         record.satisfaction ? `满意度 ${record.satisfaction}/5` : '',
       ],
       notes: record.notes,
@@ -6182,6 +6222,59 @@ function createStyles(theme: ThemePalette) {
     borderWidth: 1,
     borderColor: colors.line,
     ...cardShadow,
+  },
+  intimacyPickerPanel: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 26,
+    padding: 16,
+    gap: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  intimacyPickerHint: {
+    marginTop: -8,
+    marginBottom: 4,
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  intimacyPickerOption: {
+    minHeight: 70,
+    borderRadius: 20,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: colors.soft,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  intimacyPickerIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  intimacyPickerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  intimacyPickerTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  intimacyPickerText: {
+    marginTop: 3,
+    color: colors.sub,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 15,
   },
   monthYearTitle: {
     color: colors.text,

@@ -1,22 +1,20 @@
 {
-    "version":  "1.0.9",
+    "version":  "1.0.10",
     "releaseDate":  "2026-07-09",
     "publishedAt":  "2026-07-09T00:00:00Z",
-    "title":  "Luna Log 1.0.9：隐私、经期补录和日期选择优化",
+    "title":  "Luna Log 1.0.10：版本同步和日历隐私优化",
     "highlights":  [
-                       "首页隐私模式下折叠最近记录，普通模式下最近记录改为更含蓄的摘要展示。",
-                       "最近记录新增一周、一月、半年、一年、全部和自定义日期筛选，并显示分类数量。",
-                       "经期日历支持取消经期开始、取消经期结束和补录历史经期结束日。",
-                       "增强周期预测算法，使用加权周期平均、异常周期降权和平均经期天数估算。",
-                       "日历和日期选择器新增居中年月选择弹窗，并默认滚动到当前选中年月。",
-                       "统一首页右上角隐私和关于入口的按钮样式。"
+                       "修复应用内版本号仍显示 1.0.8 的问题。",
+                       "同步 Android 原生 versionName / versionCode，确保安装后系统和应用内都显示 1.0.10。",
+                       "日历中的亲密记录入口改为隐私化文案，点击后再选择伴侣亲密或个人亲密。",
+                       "日历、统计和最近记录中的亲密记录文案统一为更含蓄的表达。"
                    ],
-    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.9/luna-log-v1.0.9-release.apk",
-    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.9/luna-log-v1.0.9-release.apk",
-    "mirrorApkUrl":  "",
-    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.9",
-    "apkName":  "luna-log-v1.0.9-release.apk",
-    "apkSize":  76378112,
-    "apkSha256":  "f2d42f526f191a5ff8bdfe06d14badaf94903205834d3268f0ef2d07f94f91f7",
+    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
+    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
+    "mirrorApkUrl":  "https://gitee.com/ysjugg/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
+    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.10",
+    "apkName":  "luna-log-v1.0.10-release.apk",
+    "apkSize":  76380036,
+    "apkSha256":  "a8e0c0e41a95feb85373ceb9a063283bdd6ae49c5296d799b22cbbbeffced888",
     "mandatory":  false
 }
