@@ -126,6 +126,8 @@ type AppState = {
   };
 };
 
+type TimelineRange = 'week' | 'month' | 'halfYear' | 'year' | 'all' | 'custom';
+
 type TimelineItem = {
   id: string;
   type: RecordType;
@@ -145,7 +147,7 @@ type CycleInfo = {
   fertileEnd: Date;
   cycleLength: number;
   variability: number;
-  confidence: 'high' | 'low';
+  confidence: 'high' | 'medium' | 'low';
   nextPeriodEarliest: Date;
   nextPeriodLatest: Date;
 } | null;
@@ -1352,10 +1354,10 @@ export default function App() {
             {screen !== 'insights' && fabOpen && (
               <Pressable style={styles.fabBackdrop} onPress={() => setFabOpen(false)}>
                 <View style={styles.fabMenu}>
-                  <FabMenuItem primary type="partneredSex" desc="伴侣、保护措施、姿势和心情" onPress={() => openSheet('partneredSex')} />
-                  <FabMenuItem type="soloSex" desc="道具、观看、高潮和评分" onPress={() => openSheet('soloSex')} />
-                  <FabMenuItem type="period" desc="开始、结束、流量和痛经" onPress={() => openSheet('period')} />
-                  <FabMenuItem type="symptom" desc="身体和情绪变化" onPress={() => openSheet('symptom')} />
+                  <FabMenuItem primary type="partneredSex" privacy={state.settings.privacyMode} desc={state.settings.privacyMode ? "记录一段亲密时刻" : "伴侣、保护措施、姿势和心情"} onPress={() => openSheet('partneredSex')} />
+                  <FabMenuItem type="soloSex" privacy={state.settings.privacyMode} desc={state.settings.privacyMode ? "记录一段独处时刻" : "道具、观看、高潮和评分"} onPress={() => openSheet('soloSex')} />
+                  <FabMenuItem type="period" privacy={state.settings.privacyMode} desc={state.settings.privacyMode ? "记录周期变化" : "开始、结束、流量和痛经"} onPress={() => openSheet('period')} />
+                  <FabMenuItem type="symptom" privacy={state.settings.privacyMode} desc={state.settings.privacyMode ? "记录身体状态" : "身体和情绪变化"} onPress={() => openSheet('symptom')} />
                 </View>
               </Pressable>
             )}
@@ -1474,15 +1476,29 @@ function HomeScreen({
   onEditSymptom: (record: SymptomRecord) => void;
 }) {
   const cycleStatus = getCycleStatus(state, cycleInfo);
+  const cycleBadge = getCycleBadge(state, cycleInfo);
   const [filter, setFilter] = useState<'all' | RecordType>('all');
+  const [timelineRange, setTimelineRange] = useState<TimelineRange>('week');
+  const [customRangeStart, setCustomRangeStart] = useState(toDateKey(addDays(new Date(), -6)));
+  const [customRangeEnd, setCustomRangeEnd] = useState(toDateKey(new Date()));
   const [showAll, setShowAll] = useState(false);
-  const filterOptions: Array<{ value: 'all' | RecordType; label: string }> = [
+
+  const timelineRangeOptions: Array<{ value: TimelineRange; label: string }> = [
+    { value: 'week', label: '一周' },
+    { value: 'month', label: '一月' },
+    { value: 'halfYear', label: '半年' },
+    { value: 'year', label: '一年' },
     { value: 'all', label: '全部' },
-    { value: 'sex', label: '亲密' },
-    { value: 'period', label: '经期' },
-    { value: 'symptom', label: '症状' },
+    { value: 'custom', label: '自定义' },
   ];
-  const filtered = filter === 'all' ? timeline : timeline.filter((item) => item.type === filter);
+  const rangedTimeline = filterTimelineByRange(timeline, timelineRange, customRangeStart, customRangeEnd);
+  const filterOptions: Array<{ value: 'all' | RecordType; label: string; count: number }> = [
+    { value: 'all', label: '全部', count: rangedTimeline.length },
+    { value: 'sex', label: '亲密', count: rangedTimeline.filter((item) => item.type === 'sex').length },
+    { value: 'period', label: '经期', count: rangedTimeline.filter((item) => item.type === 'period').length },
+    { value: 'symptom', label: '症状', count: rangedTimeline.filter((item) => item.type === 'symptom').length },
+  ];
+  const filtered = filter === 'all' ? rangedTimeline : rangedTimeline.filter((item) => item.type === filter);
   const visible = showAll ? filtered : filtered.slice(0, 20);
   return (
     <View>
@@ -1495,14 +1511,14 @@ function HomeScreen({
             <Text style={styles.heroHint}>{cycleStatus.hint}</Text>
           </View>
           <LinearGradient colors={colors.bubbleGradient} style={styles.cycleBubble}>
-            <Text style={styles.cycleDay}>{cycleInfo ? cycleInfo.normalizedDay : '--'}</Text>
-            <Text style={styles.cycleDayLabel}>day</Text>
+            <Text style={styles.cycleDay}>{cycleBadge.value}</Text>
+            <Text style={styles.cycleDayLabel}>{cycleBadge.label}</Text>
           </LinearGradient>
         </View>
       </View>
 
       <View style={styles.quickGrid}>
-        <MetricCard label="本月" value={String(stats.monthSexCount)} hint="性生活次数" />
+        <MetricCard label="本月" value={state.settings.privacyMode ? String(timeline.length) : String(stats.monthSexCount)} hint={state.settings.privacyMode ? "记录条数" : "亲密次数"} />
         <MetricCard label="间隔" value={String(stats.averageGap)} hint="平均天数" />
         <MetricCard label="周期" value={String(cycleInfo?.cycleLength ?? state.settings.cycleDays)} hint={cycleInfo?.confidence === 'high' ? '实测平均' : '预测天数'} />
       </View>
@@ -1511,54 +1527,87 @@ function HomeScreen({
         <Text style={styles.sectionTitle}>最近记录</Text>
       </View>
 
-      {timeline.length > 0 && (
-        <View style={styles.filterRail}>
-          {filterOptions.map((option) => {
-            const active = filter === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                style={[styles.sheetChip, active && styles.sheetChipActive]}
-                onPress={() => {
-                  setFilter(option.value);
-                  setShowAll(false);
-                }}
-              >
-                <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      {timeline.length ? (
-        filtered.length ? (
-          <>
-            {visible.map((item) => (
-              <RecordCard
-                key={`${item.type}-${item.id}`}
-                item={item}
-                privacy={state.settings.privacyMode}
-                sexRecord={item.type === 'sex' ? state.sexRecords.find((record) => record.id === item.id) : undefined}
-                periodRecord={item.type === 'period' ? state.periodRecords.find((record) => record.id === item.id) : undefined}
-                symptomRecord={item.type === 'symptom' ? state.symptomRecords.find((record) => record.id === item.id) : undefined}
-                onDelete={onDelete}
-                onEditSex={onEditSex}
-                onEditPeriod={onEditPeriod}
-                onEditSymptom={onEditSymptom}
-              />
-            ))}
-            {filtered.length > visible.length && (
-              <Pressable style={styles.viewAllButton} onPress={() => setShowAll(true)}>
-                <Text style={styles.viewAllText}>查看全部 {filtered.length} 条</Text>
-              </Pressable>
-            )}
-          </>
-        ) : (
-          <Text style={styles.empty}>该分类下还没有记录。</Text>
-        )
+      {state.settings.privacyMode ? (
+        <PrivacyCollapsedRecords count={timeline.length} />
       ) : (
-        <Text style={styles.empty}>还没有记录。点右下角 + 开始添加。</Text>
+        <>
+          {timeline.length > 0 && (
+            <View style={styles.filterRail}>
+              {timelineRangeOptions.map((option) => {
+                const active = timelineRange === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.sheetChip, active && styles.sheetChipActive]}
+                    onPress={() => {
+                      setTimelineRange(option.value);
+                      setShowAll(false);
+                    }}
+                  >
+                    <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {timelineRange === 'custom' && (
+            <View style={styles.customRangePanel}>
+              <DatePickerField label="开始日期" value={customRangeStart} onChange={setCustomRangeStart} />
+              <DatePickerField label="结束日期" value={customRangeEnd} onChange={setCustomRangeEnd} />
+            </View>
+          )}
+
+          {timeline.length > 0 && (
+            <View style={styles.filterRail}>
+              {filterOptions.map((option) => {
+                const active = filter === option.value;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[styles.sheetChip, active && styles.sheetChipActive]}
+                    onPress={() => {
+                      setFilter(option.value);
+                      setShowAll(false);
+                    }}
+                  >
+                    <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{`${option.label} ${option.count}`}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+
+          {rangedTimeline.length ? (
+            filtered.length ? (
+              <>
+                {visible.map((item) => (
+                  <RecordCard
+                    key={`${item.type}-${item.id}`}
+                    item={item}
+                    privacy={false}
+                    sexRecord={item.type === 'sex' ? state.sexRecords.find((record) => record.id === item.id) : undefined}
+                    periodRecord={item.type === 'period' ? state.periodRecords.find((record) => record.id === item.id) : undefined}
+                    symptomRecord={item.type === 'symptom' ? state.symptomRecords.find((record) => record.id === item.id) : undefined}
+                    onDelete={onDelete}
+                    onEditSex={onEditSex}
+                    onEditPeriod={onEditPeriod}
+                    onEditSymptom={onEditSymptom}
+                  />
+                ))}
+                {filtered.length > visible.length && (
+                  <Pressable style={styles.viewAllButton} onPress={() => setShowAll(true)}>
+                    <Text style={styles.viewAllText}>查看全部 {filtered.length} 条</Text>
+                  </Pressable>
+                )}
+              </>
+            ) : (
+              <Text style={styles.empty}>该筛选条件下还没有记录。</Text>
+            )
+          ) : (
+            <Text style={styles.empty}>还没有记录。点右下角 + 开始添加。</Text>
+          )}
+        </>
       )}
     </View>
   );
@@ -1566,23 +1615,10 @@ function HomeScreen({
 
 function HomeSkeleton() {
   return (
-    <View>
-      <View style={styles.skeletonHero} />
-      <View style={styles.quickGrid}>
-        <View style={styles.skeletonMetric} />
-        <View style={styles.skeletonMetric} />
-        <View style={styles.skeletonMetric} />
-      </View>
-      <View style={styles.skeletonLineWide} />
-      {[0, 1, 2].map((index) => (
-        <View key={index} style={styles.skeletonCard}>
-          <View style={styles.skeletonCircle} />
-          <View style={styles.skeletonCardCopy}>
-            <View style={styles.skeletonLine} />
-            <View style={styles.skeletonLineShort} />
-          </View>
-        </View>
-      ))}
+    <View style={styles.loadingState}>
+      <View style={styles.loadingMark} />
+      <View style={styles.loadingLine} />
+      <View style={styles.loadingLineShort} />
     </View>
   );
 }
@@ -1610,6 +1646,7 @@ function CalendarScreen({
   onEditSex: (record: SexRecord) => void;
   onEditPeriodDay: (record: PeriodDayRecord | null, dateKey: string) => void;
 }) {
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const days = buildCalendarDays(visibleMonth);
   const calendarWeeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => days.slice(index * 7, index * 7 + 7));
   const monthTitle = monthLabel(visibleMonth);
@@ -1620,12 +1657,39 @@ function CalendarScreen({
   const SelectedStatusIcon = selectedStatus.Icon;
   const selectedSexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === toDateKey(selectedDate));
   const selectedInFuture = startOfDay(selectedDate) > startOfDay(new Date());
-  const selectedPeriod = findPeriodForDate(state, selectedDate);
+  const selectedPeriod = findRecordedPeriodForDate(state, selectedDate);
   const selectedPeriodDay = findPeriodDayForDate(state, selectedDate);
-  const canMarkPeriodStart = !selectedInFuture && !selectedPeriod;
-  const canMarkPeriodEnd = !selectedInFuture && state.periodRecords.some((record) => record.startDate <= toDateKey(selectedDate));
+  const editableEndPeriod = findEditablePeriodForEndDate(state, selectedDate);
+  const selectedIsPeriodStart = isPeriodStartDate(selectedPeriod, selectedDate);
+  const nextAfterEditable = editableEndPeriod ? getNextPeriodRecord(state, editableEndPeriod) : null;
+  const canCancelPeriodStart = !selectedInFuture && selectedIsPeriodStart;
+  const canMarkPeriodStart = canStartPeriodOnDate(state, selectedDate);
+  const selectedIsPeriodEnd = !!editableEndPeriod?.endDate && editableEndPeriod.endDate === toDateKey(selectedDate);
+  const canCancelPeriodEnd = !selectedInFuture && selectedIsPeriodEnd;
+  const canMarkPeriodEnd = !selectedInFuture && !!editableEndPeriod && parseDateKey(editableEndPeriod.startDate) <= startOfDay(selectedDate) && (!nextAfterEditable || toDateKey(selectedDate) < nextAfterEditable.startDate);
+  const canUsePrimaryPeriodAction = canCancelPeriodStart || canMarkPeriodStart;
+  const primaryPeriodActionLabel = selectedInFuture
+    ? '未来不可标记开始'
+    : canCancelPeriodStart
+      ? '取消经期开始'
+      : selectedPeriod
+        ? '已在经期内'
+        : canMarkPeriodStart
+          ? '标记经期开始'
+          : '需先结束上一周期';
+  const endPeriodActionLabel = selectedInFuture
+    ? '未来不可标记结束'
+    : canCancelPeriodEnd
+      ? '取消经期结束'
+      : editableEndPeriod?.endDate
+        ? '修改经期结束'
+        : '标记经期结束';
 
   function markPeriodStart() {
+    if (canCancelPeriodStart) {
+      cancelSelectedPeriod();
+      return;
+    }
     if (!canMarkPeriodStart) return;
     const key = toDateKey(selectedDate);
     onPatch((current) => ({
@@ -1644,16 +1708,22 @@ function CalendarScreen({
   }
 
   function markPeriodEnd() {
-    if (!canMarkPeriodEnd) return;
+    if (!canMarkPeriodEnd || !editableEndPeriod) return;
     const key = toDateKey(selectedDate);
     onPatch((current) => {
-      const records = [...current.periodRecords].sort((left, right) => left.startDate.localeCompare(right.startDate));
-      const periodAtDate = findPeriodForDate(current, selectedDate);
-      const index = periodAtDate
-        ? records.findIndex((record) => record.id === periodAtDate.id)
-        : records.findLastIndex((record) => record.startDate <= key);
+      const target = findEditablePeriodForEndDate(current, selectedDate);
+      if (!target) return current;
+      const next = getNextPeriodRecord(current, target);
+      if (next && key >= next.startDate) return current;
+      const records = getSortedPeriodRecords(current);
+      const index = records.findIndex((record) => record.id === target.id);
       if (index < 0) return current;
-      records[index] = { ...records[index], endDate: key };
+      if (target.endDate === key) {
+        const { endDate, ...rest } = records[index];
+        records[index] = rest;
+      } else {
+        records[index] = { ...records[index], endDate: key };
+      }
       return { ...current, periodRecords: records };
     });
   }
@@ -1661,7 +1731,7 @@ function CalendarScreen({
   function cancelSelectedPeriod() {
     if (!selectedPeriod) return;
     const start = parseDateKey(selectedPeriod.startDate);
-    const end = getPeriodEndDate(state, selectedPeriod);
+    const end = selectedPeriod.endDate ? parseDateKey(selectedPeriod.endDate) : new Date();
     onPatch((current) => ({
       ...current,
       periodRecords: current.periodRecords.filter((record) => record.id !== selectedPeriod.id),
@@ -1682,6 +1752,74 @@ function CalendarScreen({
 
   return (
     <View>
+      <View style={styles.calendarShell}>
+        <View style={styles.calendarHeader}>
+        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>
+          <ChevronLeft color={colors.primary} size={21} strokeWidth={2.7} />
+        </Pressable>
+        <Pressable style={styles.calendarTitleBox} onPress={() => setMonthPickerOpen(true)}>
+          <Text style={styles.calendarTitle}>{monthTitle}</Text>
+          <Text style={styles.calendarWeekLine}>{prediction}</Text>
+          <Text style={styles.calendarDateLine}>{longDate(selectedDate)}</Text>
+        </Pressable>
+        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>
+          <ChevronRight color={colors.primary} size={21} strokeWidth={2.7} />
+        </Pressable>
+        </View>
+
+        <View style={styles.calendarTodayRow}>
+          <Pressable style={styles.calendarTodayButton} onPress={() => {
+            const now = new Date();
+            onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
+            onSelectDate(now);
+          }}>
+            <Text style={styles.calendarTodayText}>回到今天</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.weekdayGrid}>
+          {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
+            <Text style={styles.weekday} key={day}>
+              {day}
+            </Text>
+          ))}
+        </View>
+        <View style={styles.calendarGrid}>
+          {calendarWeeks.map((week, weekIndex) => (
+            <View style={styles.calendarWeekRow} key={`week-${weekIndex}`}>
+              {week.map((date) => (
+                <CalendarDay
+                  key={date.toISOString()}
+                  date={date}
+                  visibleMonth={visibleMonth}
+                  state={state}
+                  cycleInfo={cycleInfo}
+                  selected={toDateKey(date) === toDateKey(selectedDate)}
+                  onPress={() => onSelectDate(date)}
+                />
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <MonthYearPicker
+        visible={monthPickerOpen}
+        value={visibleMonth}
+        onCancel={() => setMonthPickerOpen(false)}
+        onConfirm={(next) => {
+          onMonthChange(new Date(next.getFullYear(), next.getMonth(), 1));
+          setMonthPickerOpen(false);
+        }}
+      />
+
+      <View style={styles.legendRowBottom}>
+        <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
+        <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
+        <IconLegend color="#ff7043" Icon={Droplet} label="经期" />
+        <IconLegend color="#ffd4e4" Icon={Activity} label="易孕" />
+      </View>
+
       <View style={styles.dayStatusCard}>
         <View style={styles.dayStatusHead}>
           <LinearGradient colors={selectedStatus.colors} style={styles.dayStatusIcon}>
@@ -1689,7 +1827,7 @@ function CalendarScreen({
           </LinearGradient>
           <View style={styles.dayStatusCopy}>
             <View style={styles.calendarSelectedTitle}>
-              <Text style={styles.dayStatusTitle}>{shortDate(selectedDate)}</Text>
+              <Text style={styles.dayStatusTitle} numberOfLines={1}>{shortDate(selectedDate)}</Text>
               <Text
                 style={[
                   styles.calendarRelativePill,
@@ -1701,7 +1839,7 @@ function CalendarScreen({
                 {selectedRelative.label}
               </Text>
             </View>
-            <Text style={styles.dayStatusText}>{selectedStatus.title} · {selectedStatus.detail}</Text>
+            <Text style={styles.dayStatusText} numberOfLines={2}>{selectedStatus.title} · {selectedStatus.detail}</Text>
           </View>
         </View>
         <View style={styles.calendarDayMetrics}>
@@ -1719,14 +1857,14 @@ function CalendarScreen({
           </View>
         </View>
         <View style={styles.dayStatusActions}>
-          <Pressable style={[styles.dayStatusButton, !canMarkPeriodStart && styles.dayStatusButtonDisabled]} onPress={markPeriodStart}>
-            <Text style={[styles.dayStatusButtonText, !canMarkPeriodStart && styles.dayStatusButtonTextDisabled]}>
-              {selectedInFuture ? '未来不可标记开始' : selectedPeriod ? '已在经期内' : '标记经期开始'}
+          <Pressable style={[styles.dayStatusButton, !canUsePrimaryPeriodAction && styles.dayStatusButtonDisabled]} onPress={markPeriodStart}>
+            <Text style={[styles.dayStatusButtonText, !canUsePrimaryPeriodAction && styles.dayStatusButtonTextDisabled]}>
+              {primaryPeriodActionLabel}
             </Text>
           </Pressable>
           <Pressable style={[styles.dayStatusButton, !canMarkPeriodEnd && styles.dayStatusButtonDisabled]} onPress={markPeriodEnd}>
             <Text style={[styles.dayStatusButtonText, !canMarkPeriodEnd && styles.dayStatusButtonTextDisabled]}>
-              {selectedInFuture ? '未来不可标记结束' : '标记经期结束'}
+              {endPeriodActionLabel}
             </Text>
           </Pressable>
         </View>
@@ -1798,64 +1936,6 @@ function CalendarScreen({
             </Pressable>
           </View>
         </View>
-      </View>
-
-      <View style={styles.calendarShell}>
-        <View style={styles.calendarHeader}>
-        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>
-          <ChevronLeft color={colors.primary} size={21} strokeWidth={2.7} />
-        </Pressable>
-        <View style={styles.calendarTitleBox}>
-          <Text style={styles.calendarTitle}>{monthTitle}</Text>
-          <Text style={styles.calendarWeekLine}>{prediction}</Text>
-          <Text style={styles.calendarDateLine}>{longDate(selectedDate)}</Text>
-        </View>
-        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>
-          <ChevronRight color={colors.primary} size={21} strokeWidth={2.7} />
-        </Pressable>
-        </View>
-
-        <View style={styles.calendarTodayRow}>
-          <Pressable style={styles.calendarTodayButton} onPress={() => {
-            const now = new Date();
-            onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
-            onSelectDate(now);
-          }}>
-            <Text style={styles.calendarTodayText}>回到今天</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.weekdayGrid}>
-          {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
-            <Text style={styles.weekday} key={day}>
-              {day}
-            </Text>
-          ))}
-        </View>
-        <View style={styles.calendarGrid}>
-          {calendarWeeks.map((week, weekIndex) => (
-            <View style={styles.calendarWeekRow} key={`week-${weekIndex}`}>
-              {week.map((date) => (
-                <CalendarDay
-                  key={date.toISOString()}
-                  date={date}
-                  visibleMonth={visibleMonth}
-                  state={state}
-                  cycleInfo={cycleInfo}
-                  selected={toDateKey(date) === toDateKey(selectedDate)}
-                  onPress={() => onSelectDate(date)}
-                />
-              ))}
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.legendRowBottom}>
-        <IconLegend color={colors.sex} Icon={HeartHandshake} label="做爱" />
-        <IconLegend color={colors.primary} Icon={Sparkles} label="自慰" />
-        <IconLegend color="#ff7043" Icon={Droplet} label="经期" />
-        <IconLegend color="#ffd4e4" Icon={Activity} label="易孕" />
       </View>
     </View>
   );
@@ -2690,6 +2770,49 @@ function EntrySheet({
   );
 }
 
+function PrivacyCollapsedRecords({ count }: { count: number }) {
+  return (
+    <View style={styles.privacyCollapsedCard}>
+      <LinearGradient colors={colors.bubbleGradient} style={styles.privacyCollapsedIcon}>
+        <EyeOff color="#fff" size={20} strokeWidth={2.7} />
+      </LinearGradient>
+      <View style={styles.privacyCollapsedCopy}>
+        <Text style={styles.privacyCollapsedTitle}>最近记录已折叠</Text>
+        <Text style={styles.privacyCollapsedText}>{count ? `已保存 ${count} 条记录，点击右上角眼睛按钮查看。` : '开启隐私模式后，首页不会展示具体记录。'}</Text>
+      </View>
+    </View>
+  );
+}
+
+function getRecordSummary(item: TimelineItem, sexRecord?: SexRecord, periodRecord?: PeriodRecord, symptomRecord?: SymptomRecord) {
+  if (item.type === 'sex') {
+    const solo = sexRecord ? isSoloSexRecord(sexRecord) : false;
+    const tags = [dateTimeLabel(sexRecord?.dateTime || item.date.toISOString())];
+    if (sexRecord?.durationMinutes) tags.push(`${sexRecord.durationMinutes} 分钟`);
+    if (sexRecord?.protectionMethods?.length || sexRecord?.protection) tags.push('有保护');
+    if (sexRecord?.soloTools?.length || sexRecord?.toyUsed) tags.push('使用道具');
+    if (sexRecord?.mood) tags.push('已记录心情');
+    if (sexRecord?.satisfaction) tags.push('已评分');
+    return {
+      title: solo ? '独处时刻' : '亲密时刻',
+      meta: tags.slice(0, 3).join(' · '),
+      detail: tags.length > 3 ? '已记录更多细节' : '',
+    };
+  }
+
+  if (item.type === 'period') {
+    const tags = [periodRecord?.endDate ? `${periodRecord.startDate} - ${periodRecord.endDate}` : dateTimeLabel(item.date.toISOString())];
+    if (periodRecord?.flow) tags.push('已记录流量');
+    if (periodRecord?.painLevel) tags.push(`不适 ${periodRecord.painLevel}/5`);
+    if (periodRecord?.symptoms?.length) tags.push('有症状记录');
+    return { title: periodRecord?.endDate ? '经期记录' : '经期开始', meta: tags.slice(0, 3).join(' · '), detail: tags.length > 3 ? '已记录更多细节' : '' };
+  }
+
+  const tags = [dateTimeLabel(item.date.toISOString())];
+  if (symptomRecord?.intensity) tags.push(`强度 ${symptomRecord.intensity}/5`);
+  if (symptomRecord?.symptoms?.length) tags.push('有状态记录');
+  return { title: '身体状态', meta: tags.join(' · '), detail: '' };
+}
 function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
   return (
     <View style={styles.metricCard}>
@@ -2726,7 +2849,7 @@ function RecordCard({
   const Icon = sexKind?.Icon || meta.Icon;
   const iconColors = sexKind?.colors || meta.colors;
   const canEdit = Boolean(sexRecord || periodRecord || symptomRecord);
-  const title = !privacy && sexKind ? `${sexKind.label} ${sexRecord?.count || 1} 次` : item.title;
+  const summary = getRecordSummary(item, sexRecord, periodRecord, symptomRecord);
 
   function edit() {
     if (sexRecord) onEditSex(sexRecord);
@@ -2740,9 +2863,9 @@ function RecordCard({
         <Icon color="#fff" size={22} strokeWidth={2.6} />
       </LinearGradient>
       <View style={styles.recordCopy}>
-        <Text style={styles.recordTitle}>{privacy ? '已隐藏' : title}</Text>
-        <Text style={styles.recordMeta}>{privacy ? '隐私模式开启' : item.meta.filter(Boolean).join(' · ')}</Text>
-        {!!item.notes && !privacy && <Text style={styles.recordMeta}>{item.notes}</Text>}
+        <Text style={styles.recordTitle}>{summary.title}</Text>
+        <Text style={styles.recordMeta}>{summary.meta}</Text>
+        {!!summary.detail && <Text style={styles.recordDetailPill}>{summary.detail}</Text>}
       </View>
       {canEdit && (
         <Pressable style={styles.editButton} onPress={edit}>
@@ -2775,16 +2898,24 @@ function getSheetMeta(type: SheetType) {
   return recordMeta[type];
 }
 
-function FabMenuItem({ primary, type, desc, onPress }: { primary?: boolean; type: SheetType; desc: string; onPress: () => void }) {
+function getPrivateSheetLabel(type: SheetType) {
+  if (type === 'partneredSex') return '亲密';
+  if (type === 'soloSex') return '独处';
+  if (type === 'period') return '周期';
+  if (type === 'symptom') return '状态';
+  return '记录';
+}
+function FabMenuItem({ primary, type, desc, privacy, onPress }: { primary?: boolean; type: SheetType; desc: string; privacy?: boolean; onPress: () => void }) {
   const meta = getSheetMeta(type);
   const Icon = meta.Icon;
+  const label = privacy ? getPrivateSheetLabel(type) : `${meta.label}记录`;
   return (
     <Pressable style={[styles.fabMenuItem, primary && styles.fabMenuItemPrimary]} onPress={onPress}>
       <LinearGradient colors={primary ? meta.colors : [colors.soft, 'rgba(255,255,255,0.68)']} style={styles.fabMenuIcon}>
         <Icon color={primary ? '#fff' : colors.primary} size={18} strokeWidth={2.6} />
       </LinearGradient>
       <View style={styles.fabMenuCopy}>
-        <Text style={styles.fabMenuLabel}>{meta.label}记录</Text>
+        <Text style={styles.fabMenuLabel}>{label}</Text>
         <Text style={styles.fabMenuDesc}>{desc}</Text>
       </View>
     </Pressable>
@@ -2913,11 +3044,75 @@ function NumberSetting({ label, hint, value, onChange }: { label: string; hint: 
   );
 }
 
+function MonthYearPicker({ visible, value, onCancel, onConfirm }: { visible: boolean; value: Date; onCancel: () => void; onConfirm: (value: Date) => void }) {
+  const currentYear = new Date().getFullYear();
+  const years = useMemo(() => Array.from({ length: 13 }, (_, index) => currentYear - 10 + index), [currentYear]);
+  const months = useMemo(() => Array.from({ length: 12 }, (_, index) => index), []);
+  const [draftYear, setDraftYear] = useState(value.getFullYear());
+  const [draftMonth, setDraftMonth] = useState(value.getMonth());
+  const yearScrollRef = useRef<ScrollView | null>(null);
+  const monthScrollRef = useRef<ScrollView | null>(null);
+
+  useEffect(() => {
+    if (!visible) return;
+    const nextYear = value.getFullYear();
+    const nextMonth = value.getMonth();
+    setDraftYear(nextYear);
+    setDraftMonth(nextMonth);
+    requestAnimationFrame(() => {
+      const yearIndex = Math.max(0, years.indexOf(nextYear));
+      yearScrollRef.current?.scrollTo({ y: Math.max(0, yearIndex * 52 - 95), animated: false });
+      monthScrollRef.current?.scrollTo({ y: Math.max(0, nextMonth * 52 - 95), animated: false });
+    });
+  }, [visible, value, years]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+      <View style={styles.monthYearModalRoot}>
+        <Pressable style={styles.monthYearBackdrop} onPress={onCancel} />
+        <View style={styles.monthYearPanel}>
+          <Text style={styles.monthYearTitle}>选择年月</Text>
+          <View style={styles.monthYearColumns}>
+            <ScrollView ref={yearScrollRef} style={styles.monthYearColumn} showsVerticalScrollIndicator={false}>
+              {years.map((year) => {
+                const active = year === draftYear;
+                return (
+                  <Pressable key={year} style={[styles.monthYearOption, active && styles.monthYearOptionActive]} onPress={() => setDraftYear(year)}>
+                    <Text style={[styles.monthYearOptionText, active && styles.monthYearOptionTextActive]}>{year}年</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <ScrollView ref={monthScrollRef} style={styles.monthYearColumn} showsVerticalScrollIndicator={false}>
+              {months.map((month) => {
+                const active = month === draftMonth;
+                return (
+                  <Pressable key={month} style={[styles.monthYearOption, active && styles.monthYearOptionActive]} onPress={() => setDraftMonth(month)}>
+                    <Text style={[styles.monthYearOptionText, active && styles.monthYearOptionTextActive]}>{month + 1}月</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
+          <View style={styles.monthYearActions}>
+            <Pressable style={styles.monthYearGhostButton} onPress={onCancel}>
+              <Text style={styles.monthYearGhostText}>取消</Text>
+            </Pressable>
+            <Pressable style={styles.monthYearConfirmButton} onPress={() => onConfirm(new Date(draftYear, draftMonth, 1))}>
+              <Text style={styles.monthYearConfirmText}>确定</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 function DatePickerField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   const selectedKey = value || toDateKey(new Date());
   const selected = parseDateKey(selectedKey);
   const relative = relativeDateLabel(selected);
   const [open, setOpen] = useState(false);
+  const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [draftKey, setDraftKey] = useState(selectedKey);
   const [cursor, setCursor] = useState(new Date(selected.getFullYear(), selected.getMonth(), 1));
   const days = useMemo(() => buildCalendarDays(cursor), [cursor]);
@@ -2970,10 +3165,10 @@ function DatePickerField({ label, value, onChange }: { label: string; value: str
               <Pressable style={styles.datePickerNav} onPress={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
                 <ChevronLeft color={colors.primary} size={18} strokeWidth={2.7} />
               </Pressable>
-              <View style={styles.datePickerTitleBox}>
+              <Pressable style={styles.datePickerTitleBox} onPress={() => setMonthPickerOpen(true)}>
                 <Text style={styles.datePickerTitle}>{monthLabel(cursor)}</Text>
                 <Text style={styles.datePickerSelected}>{longDate(parseDateKey(draftKey))}</Text>
-              </View>
+              </Pressable>
               <Pressable style={styles.datePickerNav} onPress={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
                 <ChevronRight color={colors.primary} size={18} strokeWidth={2.7} />
               </Pressable>
@@ -3000,6 +3195,16 @@ function DatePickerField({ label, value, onChange }: { label: string; value: str
                 );
               })}
             </View>
+            <MonthYearPicker
+              visible={monthPickerOpen}
+              value={cursor}
+              onCancel={() => setMonthPickerOpen(false)}
+              onConfirm={(next) => {
+                setCursor(new Date(next.getFullYear(), next.getMonth(), 1));
+                setMonthPickerOpen(false);
+              }}
+            />
+
             <View style={styles.datePickerActions}>
               <Pressable style={styles.datePickerGhostButton} onPress={() => setOpen(false)}>
                 <Text style={styles.datePickerGhostText}>取消</Text>
@@ -3819,31 +4024,65 @@ function TextField({
   );
 }
 
+function median(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function weightedAverageDeviation(items: Array<{ gap: number; weight: number }>, average: number) {
+  const weightTotal = items.reduce((sum, item) => sum + item.weight, 0);
+  if (!weightTotal) return 0;
+  return items.reduce((sum, item) => sum + Math.abs(item.gap - average) * item.weight, 0) / weightTotal;
+}
+
+function getAveragePeriodDays(state: AppState) {
+  const durations = state.periodRecords
+    .filter((record) => record.startDate && record.endDate)
+    .map((record) => daysBetween(parseDateKey(record.startDate), parseDateKey(record.endDate || record.startDate)) + 1)
+    .filter((duration) => duration >= 2 && duration <= 10)
+    .slice(-6);
+  if (!durations.length) return state.settings.periodDays;
+  const recent = durations.slice(-4);
+  return Math.round(recent.reduce((sum, duration) => sum + duration, 0) / recent.length);
+}
+
 function getCycleInfo(state: AppState): CycleInfo {
-  const starts = state.periodRecords
-    .map((record) => record.startDate)
-    .filter(Boolean)
-    .sort();
-  const latestStart = starts.at(-1);
-  if (!latestStart) return null;
-  const start = parseDateKey(latestStart);
+  const records = [...state.periodRecords]
+    .filter((record) => record.startDate)
+    .sort((left, right) => left.startDate.localeCompare(right.startDate));
+  const latest = records.at(-1);
+  if (!latest) return null;
+
+  const start = parseDateKey(latest.startDate);
   const current = startOfDay(new Date());
   const day = daysBetween(start, current) + 1;
-
-  // 用最近若干次经期开始的间隔做滚动平均，替代固定的设置值
-  const gaps: number[] = [];
+  const starts = records.map((record) => record.startDate);
+  const rawGaps: number[] = [];
   for (let index = 1; index < starts.length; index += 1) {
-    gaps.push(daysBetween(parseDateKey(starts[index - 1]), parseDateKey(starts[index])));
+    rawGaps.push(daysBetween(parseDateKey(starts[index - 1]), parseDateKey(starts[index])));
   }
-  const recentGaps = gaps.slice(-6).filter((gap) => gap >= 15 && gap <= 60); // 过滤掉明显异常的间隔
-  const hasHistory = recentGaps.length >= 2;
-  const cycleLength = hasHistory
-    ? Math.round(recentGaps.reduce((sum, gap) => sum + gap, 0) / recentGaps.length)
+
+  const validGaps = rawGaps.filter((gap) => gap >= 15 && gap <= 60).slice(-6);
+  const medianGap = median(validGaps);
+  const weightedGaps = validGaps.map((gap, index) => {
+    const age = validGaps.length - index - 1;
+    const recencyWeight = 1 - age * 0.08;
+    const outlierWeight = medianGap && Math.abs(gap - medianGap) > 8 ? 0.45 : 1;
+    return { gap, weight: Math.max(0.45, recencyWeight) * outlierWeight };
+  });
+  const cycleLength = weightedGaps.length
+    ? Math.round(weightedGaps.reduce((sum, item) => sum + item.gap * item.weight, 0) / weightedGaps.reduce((sum, item) => sum + item.weight, 0))
     : state.settings.cycleDays;
-  const variability = hasHistory
-    ? Math.min(5, Math.max(1, Math.round((Math.max(...recentGaps) - Math.min(...recentGaps)) / 2)))
+  const variability = weightedGaps.length >= 2
+    ? Math.min(7, Math.max(1, Math.round(weightedAverageDeviation(weightedGaps, cycleLength))))
     : 0;
-  const confidence: 'high' | 'low' = hasHistory ? 'high' : 'low';
+  const confidence: 'high' | 'medium' | 'low' = weightedGaps.length >= 5 && variability <= 3
+    ? 'high'
+    : weightedGaps.length >= 3
+      ? 'medium'
+      : 'low';
 
   const normalizedDay = ((day - 1) % cycleLength + cycleLength) % cycleLength + 1;
   const nextPeriod = addDays(start, cycleLength * Math.max(1, Math.ceil(day / cycleLength)));
@@ -3873,7 +4112,18 @@ function cyclePredictionHint(info: NonNullable<CycleInfo>) {
     return `参考预测：${shortDate(info.nextPeriod)} 前后开始。再记录几次经期后预测会更准。`;
   }
   const band = info.variability > 0 ? `（±${info.variability} 天）` : '';
-  return `预测下次开始：${shortDate(info.nextPeriod)}${band}，排卵日前后：${shortDate(info.ovulation)}。`;
+  const confidenceLabel = info.confidence === 'high' ? '稳定预测' : '较准预测';
+  return `${confidenceLabel}：${shortDate(info.nextPeriod)}${band} 开始，排卵日预计 ${shortDate(info.ovulation)}。`;
+}
+
+function getCycleBadge(state: AppState, info: CycleInfo) {
+  if (!info) return { value: '--', label: '周期' };
+  const current = startOfDay(new Date());
+  const openPeriod = getOpenPeriodRecord(state);
+  if (openPeriod && isDateInRecordedPeriod(state, current, openPeriod)) {
+    return { value: String(daysBetween(parseDateKey(openPeriod.startDate), current) + 1), label: '经期天' };
+  }
+  return { value: String(info.normalizedDay), label: '周期日' };
 }
 
 function getCycleStatus(state: AppState, info: CycleInfo) {
@@ -3884,29 +4134,44 @@ function getCycleStatus(state: AppState, info: CycleInfo) {
       hint: '添加一次月经开始日期后，会显示下次经期和易孕期预测。',
     };
   }
+
   const current = startOfDay(new Date());
-  const isPeriod = info.normalizedDay <= state.settings.periodDays;
+  const openPeriod = getOpenPeriodRecord(state);
+  const isCurrentRecordedPeriod = openPeriod ? isDateInRecordedPeriod(state, current, openPeriod) : false;
+  const hint = cyclePredictionHint(info);
+
+  if (openPeriod && isCurrentRecordedPeriod) {
+    const periodDay = daysBetween(parseDateKey(openPeriod.startDate), current) + 1;
+    return { pill: '经期', title: `经期第 ${periodDay} 天`, hint };
+  }
+
+  const pmsStart = addDays(info.nextPeriod, -5);
+  const pmsEnd = addDays(info.nextPeriod, -1);
   const isFertile = current >= startOfDay(info.fertileStart) && current <= startOfDay(info.fertileEnd);
   const daysToNext = Math.max(0, daysBetween(current, info.nextPeriod));
-  const hint = cyclePredictionHint(info);
-  if (isPeriod) {
-    return {
-      pill: '经期',
-      title: `经期第 ${info.normalizedDay} 天`,
-      hint,
-    };
-  }
+
   if (isFertile) {
     return {
-      pill: '易孕期',
-      title: '易孕窗口',
+      pill: toDateKey(current) === toDateKey(info.ovulation) ? '排卵日' : '易孕期',
+      title: toDateKey(current) === toDateKey(info.ovulation) ? '预计排卵日' : '易孕窗口',
       hint,
     };
   }
+
+  if (current >= startOfDay(pmsStart) && current <= startOfDay(pmsEnd)) {
+    return { pill: '经前期', title: `距下次月经 ${daysToNext} 天`, hint };
+  }
+
+  if (current > startOfDay(info.ovulation) && current < startOfDay(pmsStart)) {
+    const lutealDay = Math.max(1, daysBetween(info.ovulation, current));
+    return { pill: '黄体期', title: `黄体期第 ${lutealDay} 天`, hint };
+  }
+
+  const follicularDay = Math.max(1, daysBetween(info.start, current) + 1);
   return {
-    pill: '周期预测',
-    title: `距下次月经 ${daysToNext} 天`,
-    hint,
+    pill: '卵泡期',
+    title: `距预计排卵 ${Math.max(0, daysBetween(current, info.fertileStart))} 天`,
+    hint: `${hint} 当前为卵泡期第 ${follicularDay} 天。`,
   };
 }
 
@@ -3935,14 +4200,30 @@ function buildStats(state: AppState) {
     averageCycle = Math.round(total / (starts.length - 1));
   }
 
-  const durations = state.periodRecords
-    .filter((record) => record.startDate && record.endDate)
-    .map((record) => daysBetween(parseDateKey(record.startDate), parseDateKey(record.endDate || record.startDate)) + 1);
-  const averagePeriod = durations.length ? Math.round(durations.reduce((sum, days) => sum + days, 0) / durations.length) : state.settings.periodDays;
-
+  const averagePeriod = getAveragePeriodDays(state);
   return { monthSexCount, averageGap, averageCycle, averagePeriod };
 }
 
+function filterTimelineByRange(items: TimelineItem[], range: TimelineRange, customStart: string, customEnd: string) {
+  if (range === 'all') return items;
+  const now = startOfDay(new Date());
+  const start = range === 'custom'
+    ? startOfDay(parseDateKey(customStart))
+    : range === 'week'
+      ? addDays(now, -6)
+      : range === 'month'
+        ? addDays(now, -30)
+        : range === 'halfYear'
+          ? addDays(now, -182)
+          : addDays(now, -365);
+  const end = range === 'custom' ? startOfDay(parseDateKey(customEnd)) : now;
+  const min = start <= end ? start : end;
+  const max = start <= end ? end : start;
+  return items.filter((item) => {
+    const date = startOfDay(item.date);
+    return date >= min && date <= max;
+  });
+}
 function buildTimeline(state: AppState): TimelineItem[] {
   return [
     ...state.sexRecords.map((record): TimelineItem => ({
@@ -4000,7 +4281,7 @@ function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period'
   if (findPeriodForDate(state, date)) return 'period';
   if (!info) return null;
   const day = startOfDay(date);
-  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  const predictedEnd = addDays(info.nextPeriod, getAveragePeriodDays(state) - 1);
   if (day >= startOfDay(info.nextPeriod) && day <= startOfDay(predictedEnd)) return 'predictedPeriod';
   if (day >= startOfDay(info.fertileStart) && day <= startOfDay(info.fertileEnd)) return 'fertile';
   return null;
@@ -4009,10 +4290,70 @@ function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period'
 function getPeriodEndDate(state: AppState, record: PeriodRecord) {
   const start = parseDateKey(record.startDate);
   const defaultEnd = addDays(start, initialState.settings.periodDays - 1);
-  const currentEnd = addDays(start, state.settings.periodDays - 1);
+  const currentEnd = addDays(start, getAveragePeriodDays(state) - 1);
   if (!record.endDate) return currentEnd;
   const storedEnd = parseDateKey(record.endDate);
   return toDateKey(storedEnd) === toDateKey(defaultEnd) ? currentEnd : storedEnd;
+}
+function getLatestPeriodRecord(state: AppState) {
+  return [...state.periodRecords].sort((left, right) => left.startDate.localeCompare(right.startDate)).at(-1) || null;
+}
+
+function getOpenPeriodRecord(state: AppState) {
+  const latest = getLatestPeriodRecord(state);
+  return latest && !latest.endDate ? latest : null;
+}
+
+function isDateInRecordedPeriod(state: AppState, date: Date, record: PeriodRecord) {
+  const start = parseDateKey(record.startDate);
+  const day = startOfDay(date);
+  if (!record.endDate) return day >= startOfDay(start) && day <= startOfDay(new Date());
+  const end = parseDateKey(record.endDate);
+  return day >= startOfDay(start) && day <= startOfDay(end);
+}
+
+function getSortedPeriodRecords(state: AppState) {
+  return [...state.periodRecords].sort((left, right) => left.startDate.localeCompare(right.startDate));
+}
+
+function getNextPeriodRecord(state: AppState, record: PeriodRecord) {
+  return getSortedPeriodRecords(state).find((item) => item.startDate > record.startDate) || null;
+}
+
+function canStartPeriodOnDate(state: AppState, date: Date) {
+  const key = toDateKey(date);
+  const day = startOfDay(date);
+  if (day > startOfDay(new Date())) return false;
+  if (findRecordedPeriodForDate(state, date)) return false;
+  const records = getSortedPeriodRecords(state);
+  const previous = [...records].reverse().find((record) => record.startDate < key) || null;
+  const next = records.find((record) => record.startDate > key) || null;
+  if (previous) {
+    if (!previous.endDate) return false;
+    if (key <= previous.endDate) return false;
+  }
+  if (next && key >= next.startDate) return false;
+  return true;
+}
+function findEditablePeriodForEndDate(state: AppState, date: Date) {
+  const key = toDateKey(date);
+  const records = getSortedPeriodRecords(state);
+  let candidate: PeriodRecord | null = null;
+  for (const record of records) {
+    if (record.startDate <= key) candidate = record;
+    if (record.startDate > key) break;
+  }
+  if (!candidate) return null;
+  const next = records.find((record) => record.startDate > candidate.startDate);
+  if (next && key >= next.startDate) return null;
+  return candidate;
+}
+
+function isPeriodStartDate(record: PeriodRecord | null | undefined, date: Date) {
+  return !!record && record.startDate === toDateKey(date);
+}
+function findRecordedPeriodForDate(state: AppState, date: Date) {
+  return state.periodRecords.find((record) => isDateInRecordedPeriod(state, date, record)) || null;
 }
 
 function findPeriodForDate(state: AppState, date: Date) {
@@ -4062,7 +4403,7 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
     };
   }
 
-  const predictedEnd = addDays(info.nextPeriod, state.settings.periodDays - 1);
+  const predictedEnd = addDays(info.nextPeriod, getAveragePeriodDays(state) - 1);
   if (day < startOfDay(info.start) || day > startOfDay(predictedEnd)) {
     return {
       title: '暂无周期状态',
@@ -4368,8 +4709,8 @@ function createStyles(theme: ThemePalette) {
     gap: 10,
   },
   headerIconButton: {
-    width: 46,
-    height: 46,
+    width: 48,
+    height: 48,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
@@ -4379,16 +4720,16 @@ function createStyles(theme: ThemePalette) {
     ...cardShadow,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 18,
   },
   mainContent: {
     zIndex: 2,
@@ -4525,6 +4866,38 @@ function createStyles(theme: ThemePalette) {
     fontSize: 12,
     fontWeight: '900',
   },
+  privacyCollapsedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  privacyCollapsedIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  privacyCollapsedCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  privacyCollapsedTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  privacyCollapsedText: {
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
   recordCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4557,6 +4930,17 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 12,
     lineHeight: 17,
+  },
+  recordDetailPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    color: colors.primary,
+    backgroundColor: colors.soft,
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
   },
   deleteButton: {
     width: 36,
@@ -4718,7 +5102,9 @@ function createStyles(theme: ThemePalette) {
   },
   dayStatusCopy: {
     flex: 1,
+    minHeight: 58,
     gap: 3,
+    justifyContent: 'center',
   },
   calendarSelectedTitle: {
     flexDirection: 'row',
@@ -4757,6 +5143,7 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '900',
   },
   dayStatusText: {
+    minHeight: 34,
     color: colors.sub,
     fontSize: 12,
     lineHeight: 17,
@@ -5775,6 +6162,98 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '700',
     lineHeight: 13,
   },
+  monthYearModalRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  monthYearBackdrop: {
+    position: 'absolute',
+    inset: 0,
+    backgroundColor: 'rgba(32,38,58,0.32)',
+  },
+  monthYearPanel: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 26,
+    padding: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  monthYearTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  monthYearColumns: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  monthYearColumn: {
+    flex: 1,
+    maxHeight: 242,
+    borderRadius: 18,
+    backgroundColor: colors.soft,
+  },
+  monthYearOption: {
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    marginHorizontal: 6,
+    marginVertical: 4,
+  },
+  monthYearOptionActive: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+  },
+  monthYearOptionText: {
+    color: colors.sub,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  monthYearOptionTextActive: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  monthYearActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  monthYearGhostButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  monthYearGhostText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  monthYearConfirmButton: {
+    flex: 1,
+    height: 44,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  monthYearConfirmText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   datePickerField: {
     gap: 7,
   },
@@ -6180,6 +6659,15 @@ function createStyles(theme: ThemePalette) {
   scaleTextActive: {
     color: '#fff',
   },
+  customRangePanel: {
+    gap: 10,
+    borderRadius: 22,
+    padding: 12,
+    marginBottom: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   filterRail: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -6198,6 +6686,35 @@ function createStyles(theme: ThemePalette) {
     color: colors.primary,
     fontSize: 13,
     fontWeight: '900',
+  },
+  loadingState: {
+    minHeight: 260,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...cardShadow,
+  },
+  loadingMark: {
+    width: 54,
+    height: 16,
+    borderRadius: 999,
+    backgroundColor: colors.soft,
+  },
+  loadingLine: {
+    width: 132,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.soft,
+  },
+  loadingLineShort: {
+    width: 82,
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: colors.soft,
   },
   skeletonHero: {
     height: 132,

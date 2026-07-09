@@ -2,7 +2,7 @@
     "expo":  {
                  "name":  "Luna Log",
                  "slug":  "luna-log",
-                 "version":  "1.0.8",
+                 "version":  "1.0.9",
                  "orientation":  "portrait",
                  "icon":  "./assets/app-icons/icon-1024.png",
                  "userInterfaceStyle":  "light",
@@ -16,7 +16,7 @@
                                                   },
                                  "predictiveBackGestureEnabled":  false,
                                  "package":  "com.anonymous.lunalog",
-                                 "versionCode":  9,
+                                 "versionCode":  10,
                                  "permissions":  [
                                                      "INTERNET",
                                                      "REQUEST_INSTALL_PACKAGES"
@@ -27,6 +27,11 @@
                          },
                  "plugins":  [
                                  "expo-sharing"
-                             ]
+                             ],
+                 "splash":  {
+                                "image":  "./assets/app-icons/icon-1024.png",
+                                "resizeMode":  "contain",
+                                "backgroundColor":  "#F8FBFF"
+                            }
              }
 }
