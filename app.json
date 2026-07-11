@@ -1,37 +1,55 @@
 {
-    "expo":  {
-                 "name":  "Luna Log",
-                 "slug":  "luna-log",
-                 "version":  "1.0.10",
-                 "orientation":  "portrait",
-                 "icon":  "./assets/app-icons/icon-1024.png",
-                 "userInterfaceStyle":  "light",
-                 "ios":  {
-                             "supportsTablet":  true
-                         },
-                 "android":  {
-                                 "adaptiveIcon":  {
-                                                      "foregroundImage":  "./assets/app-icons/adaptive-icon-foreground.png",
-                                                      "backgroundColor":  "#F8FBFF"
-                                                  },
-                                 "predictiveBackGestureEnabled":  false,
-                                 "package":  "com.anonymous.lunalog",
-                                 "versionCode":  11,
-                                 "permissions":  [
-                                                     "INTERNET",
-                                                     "REQUEST_INSTALL_PACKAGES"
-                                                 ]
-                             },
-                 "web":  {
-                             "favicon":  "./assets/app-icons/favicon-512.png"
-                         },
-                 "plugins":  [
-                                 "expo-sharing"
-                             ],
-                 "splash":  {
-                                "image":  "./assets/app-icons/icon-1024.png",
-                                "resizeMode":  "contain",
-                                "backgroundColor":  "#F8FBFF"
-                            }
-             }
+  "expo": {
+    "name": "Luna Log",
+    "slug": "luna-log",
+    "version": "1.0.11",
+    "orientation": "portrait",
+    "icon": "./assets/app-icons/icon-1024.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/app-icons/adaptive-icon-foreground.png",
+        "backgroundColor": "#F8FBFF"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.lunalog",
+      "versionCode": 12,
+      "permissions": [
+        "INTERNET"
+      ],
+      "blockedPermissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
+      "allowBackup": false
+    },
+    "web": {
+      "favicon": "./assets/app-icons/favicon-512.png"
+    },
+    "plugins": [
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "允许 Luna Log 使用 Face ID 解锁私密数据"
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ]
+    ],
+    "splash": {
+      "image": "./assets/app-icons/icon-1024.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FBFF"
+    }
+  }
 }

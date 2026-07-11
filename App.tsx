@@ -1,10 +1,21 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as IntentLauncher from 'expo-intent-launcher';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { allowScreenCaptureAsync, preventScreenCaptureAsync } from 'expo-screen-capture';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
+import { isValidDateKey, normalizeImportedState } from './src/domain/recordValidation';
+import {
+  defaultProtectionSettings,
+  discardStoredAppData,
+  exportedStorageKey,
+  loadProtectionSettings,
+  loadStoredAppData,
+  persistProtectionSettings,
+  persistStoredAppData,
+  type ProtectionSettings,
+} from './src/storage/secureAppStorage';
 import {
   Activity,
   Download,
@@ -40,6 +51,7 @@ import Svg, { Circle, Ellipse, G, Line, Path, Rect } from 'react-native-svg';
 import {
   ActivityIndicator,
   Alert,
+  AppState as NativeAppState,
   Image,
   Linking,
   Modal,
@@ -120,6 +132,8 @@ type AppState = {
   symptomRecords: SymptomRecord[];
   settings: {
     privacyMode: boolean;
+    appLockEnabled: boolean;
+    screenCaptureProtection: boolean;
     cycleDays: number;
     periodDays: number;
     themeStyle: ThemeStyle;
@@ -159,7 +173,7 @@ type ReleaseNote = {
   highlights: string[];
 };
 
-type UpdateSourceKind = 'manifest' | 'gitee-manifest' | 'github-release';
+type UpdateSourceKind = 'github-release';
 
 type UpdateSource = {
   key: string;
@@ -234,54 +248,31 @@ type AppUpdateInfo = {
   mandatory?: boolean;
 };
 
-type UpdateDownloadState = {
-  downloading: boolean;
-  progress: number;
-  stage: 'idle' | 'downloading' | 'fallback' | 'verifying' | 'opening' | 'failed' | 'done';
-  sourceLabel: string;
-  speedBytesPerSecond: number;
-  remainingSeconds: number | null;
-  message: string;
-};
-
 const today = new Date();
-const storageKey = 'luna-log-app-v5';
-const APP_VERSION = '1.0.10';
-const ANDROID_PACKAGE_NAME = 'com.anonymous.lunalog';
-const APK_MIME_TYPE = 'application/vnd.android.package-archive';
-const FLAG_GRANT_READ_URI_PERMISSION = 1;
+const APP_VERSION = '1.0.11';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
-const GITEE_UPDATE_MANIFEST_URL = 'https://gitee.com/api/v5/repos/ysjugg/luna-log/contents/update-manifest.json?ref=master';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
   {
-    key: 'gitee',
-    name: 'Gitee 国内镜像清单',
-    url: GITEE_UPDATE_MANIFEST_URL,
-    kind: 'gitee-manifest',
-    timeoutMs: 5200,
-  },
-  {
-    key: 'github-raw',
-    name: 'GitHub Raw',
-    url: 'https://raw.githubusercontent.com/cnxin/luna-log/master/update-manifest.json',
-    kind: 'manifest',
-  },
-  {
-    key: 'jsdelivr',
-    name: 'jsDelivr CDN',
-    url: 'https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/update-manifest.json',
-    kind: 'manifest',
-  },
-  {
     key: 'github-release',
-    name: 'GitHub Release',
+    name: 'GitHub 官方 Release',
     url: LATEST_RELEASE_URL,
     kind: 'github-release',
     timeoutMs: 7000,
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.11',
+    date: '2026-07-11',
+    title: '安全存储与发布保护',
+    highlights: [
+      'Android 和 iOS 记录已迁移到 AES-256-GCM 加密存储，密钥保存在系统安全存储中',
+      '应用锁会在解密记录前显示，并支持设备凭据或生物识别解锁',
+      '默认启用 Android 截图、录屏和最近任务缩略图保护',
+      '移除应用内 APK 下载和安装能力，更新只跳转到官方 GitHub Release 页面',
+    ],
+  },
   {
     version: '1.0.10',
     date: '2026-07-09',
@@ -472,6 +463,8 @@ const initialState: AppState = {
   symptomRecords: [],
   settings: {
     privacyMode: false,
+    appLockEnabled: false,
+    screenCaptureProtection: true,
     cycleDays: 28,
     periodDays: 5,
     themeStyle: 'classic',
@@ -486,22 +479,6 @@ type LunaLogExport = {
   exportedAt: string;
   data: AppState;
 };
-
-function normalizeImportedState(value: unknown): AppState | null {
-  if (!value || typeof value !== 'object') return null;
-  const maybeWrapped = value as { data?: unknown };
-  const source = maybeWrapped.data && typeof maybeWrapped.data === 'object' ? maybeWrapped.data : value;
-  const data = source as Partial<AppState>;
-  if (!Array.isArray(data.sexRecords) || !Array.isArray(data.periodRecords) || !Array.isArray(data.symptomRecords)) return null;
-  const importedSettings = data.settings && typeof data.settings === 'object' ? data.settings : {};
-  return {
-    sexRecords: data.sexRecords,
-    periodRecords: data.periodRecords,
-    periodDayRecords: Array.isArray(data.periodDayRecords) ? data.periodDayRecords : [],
-    symptomRecords: data.symptomRecords,
-    settings: { ...initialState.settings, ...importedSettings },
-  };
-}
 
 function hasAnyUserData(state: AppState) {
   return state.sexRecords.length > 0 || state.periodRecords.length > 0 || state.periodDayRecords.length > 0 || state.symptomRecords.length > 0;
@@ -752,56 +729,6 @@ async function fetchWithTimeout(url: string, timeoutMs = 7000, headers?: Record<
   }
 }
 
-function updateNotesFromManifest(manifest: AppUpdateManifest) {
-  if (manifest.highlights?.length) return manifest.highlights;
-  if (manifest.notes?.length) return manifest.notes;
-  if (manifest.body) return manifest.body.split('\n').map((line) => line.replace(/^[-*]\s*/, '').trim()).filter(Boolean).slice(0, 6);
-  if (manifest.changelog) return [manifest.changelog];
-  return [];
-}
-
-type GiteeContentPayload = {
-  content?: string;
-  encoding?: string;
-};
-
-function decodeGiteeManifest(payload: GiteeContentPayload): AppUpdateManifest {
-  if (!payload.content) throw new Error('Gitee 清单为空');
-  const compact = payload.content.replace(/\s/g, '');
-  if (typeof atob !== 'function') throw new Error('当前环境不支持 base64 解码');
-  const binary = atob(compact);
-  const escaped = Array.from(binary, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
-  return JSON.parse(decodeURIComponent(escaped)) as AppUpdateManifest;
-}
-
-function normalizeManifest(manifest: AppUpdateManifest, source: UpdateSource, checkedAt: string): AppUpdateInfo {
-  const latestVersion = (manifest.version || APP_VERSION).replace(/^v/i, '');
-  const notes = updateNotesFromManifest(manifest);
-  const hasUpdate = compareVersions(latestVersion, APP_VERSION) > 0;
-  const apkUrl = manifest.apkUrl || manifest.downloadUrl || '';
-  const apkSize = manifest.apkSize || manifest.fileSize || 0;
-  return {
-    status: hasUpdate ? 'available' : 'latest',
-    localVersion: APP_VERSION,
-    latestVersion,
-    title: manifest.title || (hasUpdate ? '发现新版本' : '当前已是最新版本'),
-    notes,
-    releaseDate: manifest.releaseDate || manifest.publishedAt,
-    checkedAt,
-    sourceName: source.name,
-    sourceUrl: source.url,
-    downloadUrl: manifest.downloadUrl || apkUrl || manifest.mirrorApkUrl,
-    apkUrl,
-    mirrorApkUrl: manifest.mirrorApkUrl,
-    releaseUrl: manifest.releaseUrl || `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
-    apkName: manifest.apkName || `luna-log-v${latestVersion}.apk`,
-    fileSize: apkSize,
-    apkSize,
-    apkSha256: manifest.apkSha256,
-    mandatory: manifest.mandatory,
-  };
-}
-
 function normalizeGitHubRelease(payload: GitHubReleasePayload, source: UpdateSource, checkedAt: string): AppUpdateInfo | null {
   const latestVersion = (payload.tag_name || '').replace(/^v/i, '');
   if (!latestVersion) return null;
@@ -821,7 +748,7 @@ function normalizeGitHubRelease(payload: GitHubReleasePayload, source: UpdateSou
     downloadUrl: apkAsset?.browser_download_url,
     apkUrl: apkAsset?.browser_download_url,
     mirrorApkUrl: undefined,
-    releaseUrl: payload.html_url || `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
+    releaseUrl: `${UPDATE_REPOSITORY_URL}/releases/tag/v${latestVersion}`,
     apkName: apkAsset?.name || `luna-log-v${latestVersion}.apk`,
     fileSize: apkAsset?.size,
     apkSize: apkAsset?.size,
@@ -832,16 +759,13 @@ async function readUpdateSource(source: UpdateSource, checkedAt: string) {
   const startedAt = Date.now();
   const timeoutMs = source.timeoutMs || 6500;
   try {
-    const url = source.kind === 'manifest' ? `${source.url}${source.url.includes('?') ? '&' : '?'}t=${Date.now()}` : source.url;
-    const response = await fetchWithTimeout(url, timeoutMs, source.kind === 'github-release' ? { Accept: 'application/vnd.github+json' } : undefined);
+    const response = await fetchWithTimeout(source.url, timeoutMs, { Accept: 'application/vnd.github+json' });
     const durationMs = Date.now() - startedAt;
     if (!response.ok) {
       return { info: null, diagnostic: { sourceName: source.name, sourceUrl: source.url, status: 'failed' as const, message: `HTTP ${response.status}`, durationMs } };
     }
     const payload = await response.json();
-    const info = source.kind === 'github-release'
-      ? normalizeGitHubRelease(payload as GitHubReleasePayload, source, checkedAt)
-      : normalizeManifest(payload as AppUpdateManifest, source, checkedAt);
+    const info = normalizeGitHubRelease(payload as GitHubReleasePayload, source, checkedAt);
     if (!info) {
       return { info: null, diagnostic: { sourceName: source.name, sourceUrl: source.url, status: 'failed' as const, message: '未读取到版本号', durationMs } };
     }
@@ -863,22 +787,10 @@ async function readUpdateSource(source: UpdateSource, checkedAt: string) {
   }
 }
 
-function chooseBestUpdate(infos: AppUpdateInfo[]) {
-  return [...infos].sort((left, right) => {
-    const versionCompare = compareVersions(right.latestVersion, left.latestVersion);
-    if (versionCompare !== 0) return versionCompare;
-    const priority = (source?: string) => (source?.includes('Gitee') ? 0 : source?.includes('jsDelivr') ? 1 : source?.includes('GitHub Release') ? 2 : 3);
-    return priority(left.sourceName) - priority(right.sourceName);
-  })[0];
-}
-
 async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostics: UpdateSourceDiagnostic[] }> {
   const checkedAt = new Date().toISOString();
-  const results = await Promise.all(UPDATE_SOURCES.map((source) => readUpdateSource(source, checkedAt)));
-  const diagnostics = results.map((result) => result.diagnostic);
-  const infos = results.map((result) => result.info).filter((item): item is AppUpdateInfo => Boolean(item));
-  const info = chooseBestUpdate(infos);
-  if (info) return { info, diagnostics };
+  const result = await readUpdateSource(UPDATE_SOURCES[0], checkedAt);
+  if (result.info) return { info: result.info, diagnostics: [result.diagnostic] };
 
   return {
     info: {
@@ -890,42 +802,10 @@ async function checkLatestAppUpdate(): Promise<{ info: AppUpdateInfo; diagnostic
       checkedAt,
       releaseUrl: UPDATE_REPOSITORY_URL,
     },
-    diagnostics,
+    diagnostics: [result.diagnostic],
   };
 }
 
-function getPreferredApkUrl(info?: AppUpdateInfo | null) {
-  return info?.mirrorApkUrl || info?.apkUrl || info?.downloadUrl || info?.releaseUrl || '';
-}
-
-function getFallbackApkUrl(info?: AppUpdateInfo | null) {
-  const preferred = getPreferredApkUrl(info);
-  return [info?.apkUrl, info?.downloadUrl, info?.mirrorApkUrl, info?.releaseUrl].filter((url): url is string => Boolean(url && url !== preferred))[0] || '';
-}
-
-function formatDownloadSource(url?: string) {
-  if (!url) return '未知来源';
-  if (url.includes('gitee.com')) return 'Gitee 国内镜像';
-  if (url.includes('cdn.jsdelivr')) return 'jsDelivr CDN';
-  if (url.includes('github.com')) return 'GitHub Release';
-  return '下载链接';
-}
-
-function emptyUpdateDownloadState(): UpdateDownloadState {
-  return { downloading: false, progress: 0, stage: 'idle', sourceLabel: '', speedBytesPerSecond: 0, remainingSeconds: null, message: '' };
-}
-
-function formatSpeed(bytesPerSecond: number) {
-  if (!bytesPerSecond || bytesPerSecond <= 0) return '--/s';
-  if (bytesPerSecond < 1024 * 1024) return `${Math.round(bytesPerSecond / 1024)} KB/s`;
-  return `${(bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`;
-}
-
-function formatRemaining(seconds: number | null) {
-  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return '--';
-  if (seconds < 60) return `${Math.ceil(seconds)} 秒`;
-  return `${Math.ceil(seconds / 60)} 分钟`;
-}
 export default function App() {
   const [state, setState] = useState<AppState>(initialState);
   const [loaded, setLoaded] = useState(false);
@@ -943,10 +823,21 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateDiagnostics, setUpdateDiagnostics] = useState<UpdateSourceDiagnostic[]>([]);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [updateDownload, setUpdateDownload] = useState<UpdateDownloadState>(emptyUpdateDownloadState());
   const [notice, setNotice] = useState<{ message: string; action?: { label: string; run: () => void } } | null>(null);
+  const [invalidStoredData, setInvalidStoredData] = useState<{ raw: string; storageKey: string } | null>(null);
+  const [protectionSettings, setProtectionSettings] = useState<ProtectionSettings>(defaultProtectionSettings);
+  const [protectionSettingsLoaded, setProtectionSettingsLoaded] = useState(false);
+  const [storageLoadRequested, setStorageLoadRequested] = useState(false);
+  const [sessionUnlocked, setSessionUnlocked] = useState(false);
+  const [authenticating, setAuthenticating] = useState(false);
   const loadedRef = useRef(false);
+  const persistenceEnabledRef = useRef(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const storageWriteQueue = useRef<Promise<void>>(Promise.resolve());
+  const protectionWriteQueue = useRef<Promise<void>>(Promise.resolve());
+  const protectionSettingsRef = useRef<ProtectionSettings>(defaultProtectionSettings);
+  const authenticationInFlightRef = useRef(false);
+  const nativeAppStateRef = useRef(NativeAppState.currentState);
 
   const cycleInfo = useMemo(() => getCycleInfo(state), [state]);
   const timeline = useMemo(() => buildTimeline(state), [state]);
@@ -959,17 +850,86 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    AsyncStorage.getItem(storageKey)
-      .then((raw) => {
-        if (!alive || !raw) return;
-        const parsed = JSON.parse(raw) as Partial<AppState>;
-        setState({
-          sexRecords: parsed.sexRecords || [],
-          periodRecords: parsed.periodRecords || [],
-          periodDayRecords: parsed.periodDayRecords || [],
-          symptomRecords: parsed.symptomRecords || [],
-          settings: { ...initialState.settings, ...(parsed.settings || {}) },
-        });
+    loadProtectionSettings()
+      .then((settings) => {
+        if (!alive) return;
+        protectionSettingsRef.current = settings;
+        setProtectionSettings(settings);
+      })
+      .catch(() => showNotice('读取应用保护设置失败'))
+      .finally(() => {
+        if (alive) setProtectionSettingsLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!protectionSettingsLoaded) return;
+    if (!protectionSettings.appLockEnabled) {
+      setSessionUnlocked(true);
+      setStorageLoadRequested(true);
+      return;
+    }
+    setSessionUnlocked(false);
+    void authenticateApp();
+  }, [protectionSettingsLoaded, protectionSettings.appLockEnabled]);
+
+  useEffect(() => {
+    if (!storageLoadRequested) return;
+    let alive = true;
+    loadStoredAppData()
+      .then(async (stored) => {
+        if (!alive) return;
+        if (stored.kind === 'unavailable') {
+          showNotice('当前设备的安全存储不可用，已停止自动写入。', undefined, 5000);
+          return;
+        }
+        if (stored.kind === 'corrupt') {
+          setInvalidStoredData({ raw: stored.raw, storageKey: stored.storageKey });
+          showNotice('本地数据格式异常，已停止自动写入。请在设置中导出或恢复。', undefined, 5000);
+          return;
+        }
+        if (stored.kind === 'empty') {
+          persistenceEnabledRef.current = true;
+          return;
+        }
+        const raw = stored.raw;
+        if (!alive) return;
+        if (!raw) {
+          persistenceEnabledRef.current = true;
+          return;
+        }
+        try {
+          const restored = normalizeImportedState(JSON.parse(raw), initialState.settings);
+          if (!restored) throw new Error('invalid stored data');
+          const restoredProtectionSettings: ProtectionSettings = {
+            appLockEnabled: protectionSettingsRef.current.appLockEnabled || restored.settings.appLockEnabled,
+            screenCaptureProtection: protectionSettingsRef.current.screenCaptureProtection || restored.settings.screenCaptureProtection,
+          };
+          const nextState: AppState = {
+            ...restored,
+            settings: { ...restored.settings, ...restoredProtectionSettings },
+          };
+          if (stored.source === 'legacy' && Platform.OS !== 'web') {
+            await persistStoredAppData(JSON.stringify(nextState));
+          }
+          if (
+            restoredProtectionSettings.appLockEnabled !== protectionSettingsRef.current.appLockEnabled ||
+            restoredProtectionSettings.screenCaptureProtection !== protectionSettingsRef.current.screenCaptureProtection
+          ) {
+            await persistProtectionSettings(restoredProtectionSettings);
+            protectionSettingsRef.current = restoredProtectionSettings;
+            if (restoredProtectionSettings.appLockEnabled) setSessionUnlocked(false);
+            setProtectionSettings(restoredProtectionSettings);
+          }
+          setState(nextState);
+          persistenceEnabledRef.current = true;
+        } catch {
+          setInvalidStoredData({ raw, storageKey: stored.source === 'legacy' ? 'luna-log-app-v5' : 'luna-log-app-v6' });
+          showNotice('本地数据格式异常，已停止自动写入。请在设置中导出或恢复。', undefined, 5000);
+        }
       })
       .catch(() => showNotice('读取本地数据失败'))
       .finally(() => {
@@ -980,14 +940,32 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [storageLoadRequested]);
 
   useEffect(() => {
-    if (!loadedRef.current) return;
-    AsyncStorage.setItem(storageKey, JSON.stringify(state)).catch(() => {
-      showNotice('保存失败，请重试');
-    });
+    if (!loadedRef.current || !persistenceEnabledRef.current) return;
+    const serialized = JSON.stringify(state);
+    storageWriteQueue.current = storageWriteQueue.current
+      .catch(() => undefined)
+      .then(() => persistStoredAppData(serialized))
+      .catch(() => {
+        showNotice('保存失败，请重试');
+      });
   }, [state]);
+
+  useEffect(() => {
+    const subscription = NativeAppState.addEventListener('change', (nextState) => {
+      const previousState = nativeAppStateRef.current;
+      nativeAppStateRef.current = nextState;
+      if (!protectionSettingsLoaded || !protectionSettings.appLockEnabled) return;
+      if (nextState !== 'active') {
+        setSessionUnlocked(false);
+      } else if (previousState !== 'active') {
+        void authenticateApp();
+      }
+    });
+    return () => subscription.remove();
+  }, [protectionSettingsLoaded, protectionSettings.appLockEnabled]);
 
   function patchState(updater: (current: AppState) => AppState) {
     setState((current) => updater(current));
@@ -997,6 +975,26 @@ export default function App() {
     setNotice({ message, action });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(null), duration);
+  }
+
+  async function updateProtectionSettings(patch: Partial<ProtectionSettings>) {
+    let nextSettings: ProtectionSettings | null = null;
+    const task = protectionWriteQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        nextSettings = { ...protectionSettingsRef.current, ...patch };
+        await persistProtectionSettings(nextSettings);
+        protectionSettingsRef.current = nextSettings;
+        setProtectionSettings(nextSettings);
+      });
+    protectionWriteQueue.current = task;
+    try {
+      await task;
+      return true;
+    } catch {
+      showNotice('保存应用保护设置失败');
+      return false;
+    }
   }
 
   function deleteRecord(type: RecordType, id: string) {
@@ -1049,7 +1047,7 @@ export default function App() {
       const exportObj: LunaLogExport = {
         version: 1,
         app: 'Luna Log',
-        storageKey,
+        storageKey: exportedStorageKey,
         appVersion: APP_VERSION,
         exportedAt: new Date().toISOString(),
         data: state,
@@ -1079,11 +1077,12 @@ export default function App() {
       if (result.canceled) return;
       const asset = result.assets?.[0];
       if (!asset?.uri) throw new Error('missing file');
+      if (asset.size && asset.size > 10 * 1024 * 1024) throw new Error('backup file is too large');
       const webFile = (asset as unknown as { file?: { text?: () => Promise<string> } }).file;
       const content = webFile?.text ? await webFile.text() : await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
       const imported = JSON.parse(content) as unknown;
-      const nextState = normalizeImportedState(imported);
-      if (!nextState) {
+      const importedState = normalizeImportedState(imported, initialState.settings);
+      if (!importedState) {
         Alert.alert('格式错误', '文件格式不正确，未找到 Luna Log 备份数据');
         return;
       }
@@ -1094,7 +1093,14 @@ export default function App() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.setItem(storageKey, JSON.stringify(nextState));
+              const nextState: AppState = {
+                ...importedState,
+                // A backup cannot weaken protections configured on this device.
+                settings: { ...importedState.settings, ...protectionSettingsRef.current },
+              };
+              await persistStoredAppData(JSON.stringify(nextState));
+              persistenceEnabledRef.current = true;
+              setInvalidStoredData(null);
               setState(nextState);
               showNotice('导入成功，数据已恢复');
             } catch {
@@ -1108,93 +1114,102 @@ export default function App() {
     }
   }
 
-  async function downloadUpdateFromUrl(info: AppUpdateInfo, url: string, fallback: boolean) {
-    if (!FileSystem.documentDirectory) throw new Error('document directory unavailable');
-    const filename = info.apkName || `luna-log-v${info.latestVersion}.apk`;
-    const target = `${FileSystem.documentDirectory}${filename}`;
-    const sourceLabel = formatDownloadSource(url);
-    const startedAt = Date.now();
-    setUpdateDownload({ downloading: true, progress: 0, stage: fallback ? 'fallback' : 'downloading', sourceLabel, speedBytesPerSecond: 0, remainingSeconds: null, message: fallback ? '正在切换备用下载源' : '正在下载更新包' });
-    const download = FileSystem.createDownloadResumable(url, target, {}, (progress) => {
-      const expected = progress.totalBytesExpectedToWrite || info.apkSize || info.fileSize || 0;
-      const written = progress.totalBytesWritten || 0;
-      const elapsedSeconds = Math.max(0.1, (Date.now() - startedAt) / 1000);
-      const speed = written / elapsedSeconds;
-      const remaining = expected > 0 && speed > 0 ? Math.max(0, (expected - written) / speed) : null;
-      const ratio = expected > 0 ? written / expected : 0;
-      setUpdateDownload({
-        downloading: true,
-        progress: Math.max(0, Math.min(1, ratio)),
-        stage: fallback ? 'fallback' : 'downloading',
-        sourceLabel,
-        speedBytesPerSecond: speed,
-        remainingSeconds: remaining,
-        message: `${sourceLabel} · ${formatSpeed(speed)} · 剩余 ${formatRemaining(remaining)}`,
-      });
-    });
-    const result = await download.downloadAsync();
-    if (!result?.uri) throw new Error('download failed');
-    setUpdateDownload({ downloading: true, progress: 1, stage: 'opening', sourceLabel, speedBytesPerSecond: 0, remainingSeconds: 0, message: '下载完成，正在打开安装包' });
-    return result.uri;
-  }
-
-  async function openAndroidApkInstaller(fileUri: string) {
-    const contentUri = await FileSystem.getContentUriAsync(fileUri);
+  async function handleExportInvalidStoredData() {
+    if (!invalidStoredData) return;
     try {
-      await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-        data: contentUri,
-        type: APK_MIME_TYPE,
-        flags: FLAG_GRANT_READ_URI_PERMISSION,
-      });
-    } catch (error) {
-      try {
-        await IntentLauncher.startActivityAsync(IntentLauncher.ActivityAction.MANAGE_UNKNOWN_APP_SOURCES, {
-          data: `package:${ANDROID_PACKAGE_NAME}`,
-        });
-      } catch {
-        // Some Android skins do not support the app-specific unknown-source settings URI.
-      }
-      throw error;
-    }
-  }
-
-  async function handleDownloadUpdate(info?: AppUpdateInfo | null) {
-    const primaryUrl = getPreferredApkUrl(info);
-    if (!info || !primaryUrl) {
-      showNotice('暂无可下载的安装包');
-      return;
-    }
-    if (Platform.OS === 'web') {
-      openExternalUrl(primaryUrl);
-      return;
-    }
-    if (updateDownload.downloading) return;
-    const fallbackUrl = getFallbackApkUrl(info);
-    try {
-      let uri = '';
-      try {
-        uri = await downloadUpdateFromUrl(info, primaryUrl, false);
-      } catch (error) {
-        if (!fallbackUrl) throw error;
-        uri = await downloadUpdateFromUrl(info, fallbackUrl, true);
-      }
-      setUpdateDownload({ downloading: false, progress: 1, stage: 'done', sourceLabel: formatDownloadSource(primaryUrl), speedBytesPerSecond: 0, remainingSeconds: 0, message: '下载完成' });
-      if (Platform.OS === 'android') {
-        try {
-          await openAndroidApkInstaller(uri);
-        } catch {
-          Alert.alert('需要安装权限', '安装器没有成功打开。请允许 Luna Log 安装未知应用后，再点击一次下载更新。');
-        }
-      } else if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: APK_MIME_TYPE, dialogTitle: '安装 Luna Log 更新' });
+      const filename = `luna-log-recovery-${Date.now()}.json`;
+      if (Platform.OS === 'web') {
+        if (!downloadJsonOnWeb(filename, invalidStoredData.raw)) throw new Error('web download unavailable');
       } else {
-        openExternalUrl(fallbackUrl || primaryUrl);
+        if (!FileSystem.documentDirectory) throw new Error('document directory unavailable');
+        const path = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.writeAsStringAsync(path, invalidStoredData.raw, { encoding: FileSystem.EncodingType.UTF8 });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: '导出 Luna Log 原始恢复数据' });
+        }
       }
-    } catch (error) {
-      setUpdateDownload({ downloading: false, progress: 0, stage: 'failed', sourceLabel: formatDownloadSource(primaryUrl), speedBytesPerSecond: 0, remainingSeconds: null, message: error instanceof Error ? error.message : '下载失败' });
-      Alert.alert('内置升级失败', '无法下载或打开更新包，请尝试外部下载');
+      showNotice('已导出原始恢复数据');
+    } catch {
+      Alert.alert('导出失败', '无法导出原始恢复数据，请稍后重试。');
     }
   }
+
+  async function authenticateApp() {
+    if (!protectionSettingsRef.current.appLockEnabled || authenticationInFlightRef.current) return;
+    authenticationInFlightRef.current = true;
+    setAuthenticating(true);
+    try {
+      const enrollmentLevel = await LocalAuthentication.getEnrolledLevelAsync();
+      if (enrollmentLevel === LocalAuthentication.SecurityLevel.NONE) {
+        Alert.alert('无法启用应用锁', '此设备没有可用的生物识别或设备凭据。应用锁已关闭。');
+        if (!(await updateProtectionSettings({ appLockEnabled: false }))) return;
+        patchState((current) => ({ ...current, settings: { ...current.settings, appLockEnabled: false } }));
+        setSessionUnlocked(true);
+        return;
+      }
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: '解锁 Luna Log',
+        promptSubtitle: '验证身份后查看私密记录',
+        cancelLabel: '取消',
+        disableDeviceFallback: false,
+        biometricsSecurityLevel: 'strong',
+      });
+      if (result.success) {
+        setSessionUnlocked(true);
+        setStorageLoadRequested(true);
+      }
+    } catch {
+      showNotice('无法验证身份，请重试');
+    } finally {
+      authenticationInFlightRef.current = false;
+      setAuthenticating(false);
+    }
+  }
+
+  async function handleAppLockChange(enabled: boolean) {
+    if (!enabled) {
+      if (!(await updateProtectionSettings({ appLockEnabled: false }))) return;
+      setSessionUnlocked(true);
+      patchState((current) => ({ ...current, settings: { ...current.settings, appLockEnabled: false } }));
+      return;
+    }
+    try {
+      const enrollmentLevel = await LocalAuthentication.getEnrolledLevelAsync();
+      if (enrollmentLevel === LocalAuthentication.SecurityLevel.NONE) {
+        Alert.alert('无法启用应用锁', '请先在设备设置中配置生物识别或设备锁屏凭据。');
+        return;
+      }
+      if (!(await updateProtectionSettings({ appLockEnabled: true }))) return;
+      setSessionUnlocked(false);
+      patchState((current) => ({ ...current, settings: { ...current.settings, appLockEnabled: true } }));
+    } catch {
+      Alert.alert('无法启用应用锁', '当前设备不支持本地身份验证。');
+    }
+  }
+
+  function discardInvalidStoredData() {
+    const recoveryData = invalidStoredData;
+    if (!recoveryData) return;
+    Alert.alert('丢弃受损数据', '这会永久删除当前无法读取的本地数据。建议先导出原始恢复数据。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '丢弃并重新开始',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await discardStoredAppData(recoveryData.storageKey);
+            persistenceEnabledRef.current = true;
+            setInvalidStoredData(null);
+            setState({ ...initialState, settings: { ...initialState.settings, ...protectionSettingsRef.current } });
+            showNotice('已清除受损数据，可以重新开始记录');
+          } catch {
+            Alert.alert('操作失败', '无法清除受损数据，请稍后重试。');
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleCheckUpdate() {
     if (isCheckingUpdate) return;
     setIsCheckingUpdate(true);
@@ -1293,8 +1308,12 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
+      <ScreenCaptureGuard enabled={protectionSettings.screenCaptureProtection} />
       <View style={Platform.OS === 'web' ? styles.webStage : styles.nativeStage}>
         <View style={Platform.OS === 'web' ? styles.webPhoneFrame : styles.nativeFrame}>
+          {protectionSettingsLoaded && protectionSettings.appLockEnabled && !sessionUnlocked ? (
+            <AppLockScreen authenticating={authenticating} onUnlock={authenticateApp} />
+          ) : (
           <View style={styles.appContainer}>
             <LinearGradient colors={colors.appGradient} style={StyleSheet.absoluteFill} />
 
@@ -1302,7 +1321,7 @@ export default function App() {
               <View style={styles.greeting}>
                 <Text style={styles.dateLabel}>{new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(today)}</Text>
                 <Text style={styles.title}>{state.settings.privacyMode ? '已隐藏' : currentCopy.title}</Text>
-                <Text style={styles.subtitle}>{currentCopy.subtitle}</Text>
+                <Text style={styles.subtitle}>{state.settings.privacyMode ? '隐私模式已开启' : currentCopy.subtitle}</Text>
               </View>
               <View style={styles.headerActions}>
                 <Pressable
@@ -1356,10 +1375,24 @@ export default function App() {
               {loaded && screen === 'settings' && (
                 <SettingsScreen
                   state={state}
-                  onPatch={(settings) => patchState((current) => ({ ...current, settings: { ...current.settings, ...settings } }))}
+                  onPatch={(settings) => {
+                    if (settings.screenCaptureProtection !== undefined) {
+                      void updateProtectionSettings({ screenCaptureProtection: settings.screenCaptureProtection }).then((saved) => {
+                        if (saved) {
+                          patchState((current) => ({ ...current, settings: { ...current.settings, ...settings } }));
+                        }
+                      });
+                      return;
+                    }
+                    patchState((current) => ({ ...current, settings: { ...current.settings, ...settings } }));
+                  }}
+                  onAppLockChange={handleAppLockChange}
                   onClear={clearRecords}
                   onExportData={handleExportData}
                   onImportData={handleImportData}
+                  recoveryAvailable={Boolean(invalidStoredData)}
+                  onExportInvalidData={handleExportInvalidStoredData}
+                  onDiscardInvalidData={discardInvalidStoredData}
                 />
               )}
             </ScrollView>
@@ -1401,8 +1434,6 @@ export default function App() {
               checking={isCheckingUpdate}
               onClose={() => setAboutOpen(false)}
               onCheckUpdate={handleCheckUpdate}
-              onDownloadUpdate={() => handleDownloadUpdate(updateInfo)}
-              updateDownload={updateDownload}
               onOpenUrl={openExternalUrl}
             />
 
@@ -1463,6 +1494,7 @@ export default function App() {
               }}
             />
           </View>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -1488,8 +1520,11 @@ function HomeScreen({
   onEditPeriod: (record: PeriodRecord) => void;
   onEditSymptom: (record: SymptomRecord) => void;
 }) {
-  const cycleStatus = getCycleStatus(state, cycleInfo);
-  const cycleBadge = getCycleBadge(state, cycleInfo);
+  const privacyMode = state.settings.privacyMode;
+  const cycleStatus = privacyMode
+    ? { pill: '已隐藏', title: '隐私模式已开启', hint: '关闭隐私模式后查看周期状态和趋势。' }
+    : getCycleStatus(state, cycleInfo);
+  const cycleBadge = privacyMode ? { value: '--', label: '已隐藏' } : getCycleBadge(state, cycleInfo);
   const [filter, setFilter] = useState<'all' | RecordType>('all');
   const [timelineRange, setTimelineRange] = useState<TimelineRange>('week');
   const [customRangeStart, setCustomRangeStart] = useState(toDateKey(addDays(new Date(), -6)));
@@ -1531,16 +1566,16 @@ function HomeScreen({
       </View>
 
       <View style={styles.quickGrid}>
-        <MetricCard label="本月" value={state.settings.privacyMode ? String(timeline.length) : String(stats.monthSexCount)} hint={state.settings.privacyMode ? "记录条数" : "亲密次数"} />
-        <MetricCard label="间隔" value={String(stats.averageGap)} hint="平均天数" />
-        <MetricCard label="周期" value={String(cycleInfo?.cycleLength ?? state.settings.cycleDays)} hint={cycleInfo?.confidence === 'high' ? '实测平均' : '预测天数'} />
+        <MetricCard label="本月" value={privacyMode ? '--' : String(stats.monthSexCount)} hint={privacyMode ? '已隐藏' : '亲密次数'} />
+        <MetricCard label="间隔" value={privacyMode ? '--' : String(stats.averageGap)} hint={privacyMode ? '已隐藏' : '平均天数'} />
+        <MetricCard label="周期" value={privacyMode ? '--' : String(cycleInfo?.cycleLength ?? state.settings.cycleDays)} hint={privacyMode ? '已隐藏' : cycleInfo?.confidence === 'high' ? '实测平均' : '预测天数'} />
       </View>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>最近记录</Text>
       </View>
 
-      {state.settings.privacyMode ? (
+      {privacyMode ? (
         <PrivacyCollapsedRecords count={timeline.length} />
       ) : (
         <>
@@ -1636,6 +1671,38 @@ function HomeSkeleton() {
   );
 }
 
+function ScreenCaptureGuard({ enabled }: { enabled: boolean }) {
+  useEffect(() => {
+    const key = 'luna-log-sensitive-content';
+    const task = enabled ? preventScreenCaptureAsync(key) : allowScreenCaptureAsync(key);
+    task.catch(() => undefined);
+    return () => {
+      if (enabled) allowScreenCaptureAsync(key).catch(() => undefined);
+    };
+  }, [enabled]);
+  return null;
+}
+
+function AppLockScreen({ authenticating, onUnlock }: { authenticating: boolean; onUnlock: () => void }) {
+  return (
+    <View style={styles.appContainer}>
+      <LinearGradient colors={colors.appGradient} style={StyleSheet.absoluteFill} />
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 18 }}>
+        <LinearGradient colors={colors.avatarGradient} style={{ width: 78, height: 78, borderRadius: 39, alignItems: 'center', justifyContent: 'center' }}>
+          <EyeOff color="#fff" size={34} strokeWidth={2.4} />
+        </LinearGradient>
+        <Text style={styles.emptyTitle}>Luna Log 已锁定</Text>
+        <Text style={[styles.emptyHint, { textAlign: 'center', maxWidth: 280 }]}>验证设备身份后才能查看私密记录。</Text>
+        <Pressable style={[styles.primaryButton, { width: '100%', maxWidth: 280 }]} onPress={onUnlock} disabled={authenticating}>
+          <LinearGradient colors={colors.avatarGradient} style={styles.primaryButtonGradient}>
+            {authenticating ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>解锁</Text>}
+          </LinearGradient>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function CalendarScreen({
   state,
   visibleMonth,
@@ -1661,13 +1728,16 @@ function CalendarScreen({
 }) {
   const [monthPickerOpen, setMonthPickerOpen] = useState(false);
   const [intimacyPickerOpen, setIntimacyPickerOpen] = useState(false);
+  const privacyMode = state.settings.privacyMode;
   const days = buildCalendarDays(visibleMonth);
   const calendarWeeks = Array.from({ length: Math.ceil(days.length / 7) }, (_, index) => days.slice(index * 7, index * 7 + 7));
   const monthTitle = monthLabel(visibleMonth);
-  const prediction = cycleInfo ? `下次经期预计 ${shortDate(cycleInfo.nextPeriod)} 开始` : '添加经期开始日后显示预测';
+  const prediction = privacyMode ? '隐私模式已开启' : cycleInfo ? `下次经期预计 ${shortDate(cycleInfo.nextPeriod)} 开始` : '添加经期开始日后显示预测';
   const selectedDate = selectedDateKey ? parseDateKey(selectedDateKey) : new Date();
   const selectedRelative = relativeDateLabel(selectedDate);
-  const selectedStatus = getDayCycleStatus(selectedDate, state, cycleInfo);
+  const selectedStatus = privacyMode
+    ? { title: '当天详情已隐藏', detail: '关闭隐私模式后查看周期和记录详情。', Icon: EyeOff, colors: [colors.primary, colors.primaryLight] as const }
+    : getDayCycleStatus(selectedDate, state, cycleInfo);
   const SelectedStatusIcon = selectedStatus.Icon;
   const selectedSexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === toDateKey(selectedDate));
   const selectedInFuture = startOfDay(selectedDate) > startOfDay(new Date());
@@ -1745,7 +1815,7 @@ function CalendarScreen({
   function cancelSelectedPeriod() {
     if (!selectedPeriod) return;
     const start = parseDateKey(selectedPeriod.startDate);
-    const end = selectedPeriod.endDate ? parseDateKey(selectedPeriod.endDate) : new Date();
+    const end = getPeriodEndDate(state, selectedPeriod);
     onPatch((current) => ({
       ...current,
       periodRecords: current.periodRecords.filter((record) => record.id !== selectedPeriod.id),
@@ -1895,19 +1965,19 @@ function CalendarScreen({
         </View>
         <View style={styles.calendarDayMetrics}>
           <View style={styles.calendarMetric}>
-            <Text style={styles.calendarMetricValue}>{selectedSexRecords.length}</Text>
+            <Text style={styles.calendarMetricValue}>{privacyMode ? '--' : selectedSexRecords.length}</Text>
             <Text style={styles.calendarMetricLabel}>亲密</Text>
           </View>
           <View style={styles.calendarMetric}>
-            <Text style={styles.calendarMetricValue}>{selectedPeriod ? 1 : 0}</Text>
+            <Text style={styles.calendarMetricValue}>{privacyMode ? '--' : selectedPeriod ? 1 : 0}</Text>
             <Text style={styles.calendarMetricLabel}>经期</Text>
           </View>
           <View style={styles.calendarMetric}>
-            <Text style={styles.calendarMetricValue}>{selectedStatus.title.includes('排卵') ? 1 : 0}</Text>
+            <Text style={styles.calendarMetricValue}>{privacyMode ? '--' : selectedStatus.title.includes('排卵') ? 1 : 0}</Text>
             <Text style={styles.calendarMetricLabel}>排卵</Text>
           </View>
         </View>
-        <View style={styles.dayStatusActions}>
+        {!privacyMode && <View style={styles.dayStatusActions}>
           <Pressable style={[styles.dayStatusButton, !canUsePrimaryPeriodAction && styles.dayStatusButtonDisabled]} onPress={markPeriodStart}>
             <Text style={[styles.dayStatusButtonText, !canUsePrimaryPeriodAction && styles.dayStatusButtonTextDisabled]}>
               {primaryPeriodActionLabel}
@@ -1918,8 +1988,8 @@ function CalendarScreen({
               {endPeriodActionLabel}
             </Text>
           </Pressable>
-        </View>
-        {selectedPeriod && (
+        </View>}
+        {!privacyMode && selectedPeriod && (
           <View style={styles.daySexSection}>
             <Text style={styles.daySexTitle}>当天月经状态</Text>
             {selectedPeriodDay ? (
@@ -1950,6 +2020,18 @@ function CalendarScreen({
             </View>
           </View>
         )}
+        {privacyMode ? (
+          <View style={styles.daySexSection}>
+            <Text style={styles.daySexTitle}>当天记录已隐藏</Text>
+            <Text style={styles.daySexEmpty}>关闭隐私模式后查看或编辑当天记录。</Text>
+            <View style={styles.daySexQuickActions}>
+              <Pressable style={[styles.daySexQuickButton, styles.daySexQuickButtonPrimary]} onPress={() => setIntimacyPickerOpen(true)}>
+                <HeartHandshake color="#fff" size={15} strokeWidth={2.7} />
+                <Text style={[styles.daySexQuickButtonText, styles.daySexQuickButtonTextPrimary]}>添加记录</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
         <View style={styles.daySexSection}>
           <Text style={styles.daySexTitle}>当天亲密记录</Text>
           {selectedSexRecords.length ? (
@@ -1980,6 +2062,7 @@ function CalendarScreen({
             </Pressable>
           </View>
         </View>
+        )}
       </View>
     </View>
   );
@@ -1998,6 +2081,16 @@ function InsightsScreen({
   range: 'week' | 'month' | 'year';
   onRangeChange: (range: 'week' | 'month' | 'year') => void;
 }) {
+  if (state.settings.privacyMode) {
+    return (
+      <View style={styles.emptyInsights}>
+        <EyeOff size={68} color={colors.sub} strokeWidth={1.8} />
+        <Text style={styles.emptyTitle}>统计已隐藏</Text>
+        <Text style={styles.emptyHint}>关闭隐私模式后查看趋势和周期数据</Text>
+      </View>
+    );
+  }
+
   const totalRecords = state.sexRecords.length + state.periodRecords.length + state.symptomRecords.length;
   if (totalRecords === 0) return <EmptyInsights />;
   if (state.sexRecords.length < 3) {
@@ -2133,15 +2226,23 @@ function EmptyInsights() {
 }function SettingsScreen({
   state,
   onPatch,
+  onAppLockChange,
   onClear,
   onExportData,
   onImportData,
+  recoveryAvailable,
+  onExportInvalidData,
+  onDiscardInvalidData,
 }: {
   state: AppState;
   onPatch: (settings: Partial<AppState['settings']>) => void;
+  onAppLockChange: (enabled: boolean) => void;
   onClear: () => void;
   onExportData: () => void;
   onImportData: () => void;
+  recoveryAvailable: boolean;
+  onExportInvalidData: () => void;
+  onDiscardInvalidData: () => void;
 }) {
   return (
     <View>
@@ -2162,9 +2263,23 @@ function EmptyInsights() {
       <View style={styles.settingRow}>
         <View style={styles.settingCopy}>
           <Text style={styles.settingTitle}>隐私模式</Text>
-          <Text style={styles.settingHint}>隐藏标题和时间线细节</Text>
+          <Text style={styles.settingHint}>隐藏首页、日历和统计中的敏感内容</Text>
         </View>
         <Switch value={state.settings.privacyMode} onValueChange={(privacyMode) => onPatch({ privacyMode })} />
+      </View>
+      <View style={styles.settingRow}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.settingTitle}>应用锁</Text>
+          <Text style={styles.settingHint}>返回应用时要求生物识别或设备凭据</Text>
+        </View>
+        <Switch value={state.settings.appLockEnabled} onValueChange={onAppLockChange} />
+      </View>
+      <View style={styles.settingRow}>
+        <View style={styles.settingCopy}>
+          <Text style={styles.settingTitle}>截图保护</Text>
+          <Text style={styles.settingHint}>Android 上阻止截图、录屏和最近任务缩略图</Text>
+        </View>
+        <Switch value={state.settings.screenCaptureProtection} onValueChange={(screenCaptureProtection) => onPatch({ screenCaptureProtection })} />
       </View>
       <View style={styles.themePanel}>
         <View style={styles.settingCopy}>
@@ -2191,8 +2306,8 @@ function EmptyInsights() {
           })}
         </View>
       </View>
-      <NumberSetting label="周期长度" hint="经期记录不足 3 次时的默认预测值" value={state.settings.cycleDays} onChange={(cycleDays) => onPatch({ cycleDays })} />
-      <NumberSetting label="经期天数" hint="用于日历经期标记" value={state.settings.periodDays} onChange={(periodDays) => onPatch({ periodDays })} />
+      <NumberSetting label="周期长度" hint="经期记录不足 3 次时的默认预测值" value={state.settings.cycleDays} min={15} max={60} onChange={(cycleDays) => onPatch({ cycleDays })} />
+      <NumberSetting label="经期天数" hint="用于日历经期标记" value={state.settings.periodDays} min={2} max={10} onChange={(periodDays) => onPatch({ periodDays })} />
 
       <View style={styles.themePanel}>
         <View style={styles.settingCopy}>
@@ -2214,6 +2329,28 @@ function EmptyInsights() {
           </View>
         </Pressable>
       </View>
+      {recoveryAvailable && (
+        <View style={styles.themePanel}>
+          <View style={styles.settingCopy}>
+            <Text style={styles.settingTitle}>受损数据恢复</Text>
+            <Text style={styles.settingHint}>已停止自动写入，避免覆盖无法读取的本地数据</Text>
+          </View>
+          <Pressable style={styles.settingRowCompact} onPress={onExportInvalidData}>
+            <Download color={colors.primary} size={19} strokeWidth={2.6} />
+            <View style={styles.settingCopy}>
+              <Text style={styles.settingTitle}>导出原始恢复数据</Text>
+              <Text style={styles.settingHint}>保留当前文件以便后续修复</Text>
+            </View>
+          </Pressable>
+          <Pressable style={styles.settingRowCompact} onPress={onDiscardInvalidData}>
+            <Trash2 color={colors.danger} size={19} strokeWidth={2.6} />
+            <View style={styles.settingCopy}>
+              <Text style={styles.dangerRowTitle}>丢弃并重新开始</Text>
+              <Text style={styles.settingHint}>删除受损本地数据</Text>
+            </View>
+          </Pressable>
+        </View>
+      )}
       <Pressable style={styles.dangerRow} onPress={onClear}>
         <View style={styles.settingCopy}>
           <Text style={styles.dangerRowTitle}>重置所有数据</Text>
@@ -2232,8 +2369,6 @@ function AboutScreen({
   checking,
   onClose,
   onCheckUpdate,
-  onDownloadUpdate,
-  updateDownload,
   onOpenUrl,
 }: {
   visible: boolean;
@@ -2242,8 +2377,6 @@ function AboutScreen({
   checking: boolean;
   onClose: () => void;
   onCheckUpdate: () => void;
-  onDownloadUpdate: () => void;
-  updateDownload: UpdateDownloadState;
   onOpenUrl: (url?: string) => void;
 }) {
   if (!visible) return null;
@@ -2264,9 +2397,7 @@ function AboutScreen({
       : updateInfo?.status === 'failed'
         ? styles.updateStatusFailed
         : styles.updateStatusLatest;
-  const primaryUrl = getPreferredApkUrl(updateInfo) || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
-  const externalUrl = updateInfo?.apkUrl || updateInfo?.downloadUrl || updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
-  const downloadSource = formatDownloadSource(primaryUrl);
+  const releaseUrl = updateInfo?.releaseUrl || UPDATE_REPOSITORY_URL;
 
   return (
     <View style={styles.aboutOverlay}>
@@ -2305,7 +2436,7 @@ function AboutScreen({
               </View>
               <View style={styles.settingCopy}>
                 <Text style={styles.settingTitle}>检查更新</Text>
-                <Text style={styles.settingHint}>参考 LifeLog 的多源清单检查和诊断信息</Text>
+                <Text style={styles.settingHint}>从 GitHub 官方 Release 检查版本和发布说明</Text>
               </View>
             </View>
             <Text style={[styles.updateStatusPill, statusStyle]}>{statusLabel}</Text>
@@ -2325,17 +2456,7 @@ function AboutScreen({
                 {updateInfo.sourceName ? `${updateInfo.sourceName} · ` : ''}
                 {formatCheckedAt(updateInfo.checkedAt)}
               </Text>
-              {updateInfo.status === 'available' && (
-                <Text style={styles.updateDetailMeta}>内置升级源：{downloadSource}</Text>
-              )}
-              {updateDownload.downloading && (
-                <View style={styles.updateProgressBox}>
-                  <View style={styles.updateProgressTrack}>
-                    <View style={[styles.updateProgressFill, { width: `${Math.round(updateDownload.progress * 100)}%` }]} />
-                  </View>
-                  <Text style={styles.updateDetailMeta}>{updateDownload.message || `下载中 ${Math.round(updateDownload.progress * 100)}%`}</Text>
-                </View>
-              )}
+              {updateInfo.status === 'available' && <Text style={styles.updateDetailMeta}>请通过官方发布页下载并安装更新。</Text>}
               {updateInfo.notes.map((note) => (
                 <View key={note} style={styles.releaseBulletRow}>
                   <View style={styles.releaseBulletDot} />
@@ -2346,19 +2467,13 @@ function AboutScreen({
           )}
 
           <View style={styles.updateActionRow}>
-            <Pressable style={[styles.updateActionButton, styles.updateActionPrimary]} onPress={onCheckUpdate} disabled={checking || updateDownload.downloading}>
+            <Pressable style={[styles.updateActionButton, styles.updateActionPrimary]} onPress={onCheckUpdate} disabled={checking}>
               {checking ? <ActivityIndicator color="#fff" size="small" /> : <RefreshCw color="#fff" size={17} strokeWidth={2.7} />}
               <Text style={styles.updateActionPrimaryText}>{checking ? '检查中' : '检查'}</Text>
             </Pressable>
-            {updateInfo?.status === 'available' && primaryUrl && (
-              <Pressable style={styles.updateActionButton} onPress={onDownloadUpdate} disabled={updateDownload.downloading}>
-                {updateDownload.downloading ? <ActivityIndicator color={colors.primary} size="small" /> : <Download color={colors.primary} size={17} strokeWidth={2.7} />}
-                <Text style={styles.updateActionText}>{updateDownload.downloading ? `${Math.round(updateDownload.progress * 100)}%` : '内置升级'}</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(externalUrl)}>
+            <Pressable style={styles.updateActionButton} onPress={() => onOpenUrl(releaseUrl)}>
               <ExternalLink color={colors.primary} size={17} strokeWidth={2.7} />
-              <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '外部下载' : '项目主页'}</Text>
+              <Text style={styles.updateActionText}>{updateInfo?.status === 'available' ? '打开发布页' : '项目主页'}</Text>
             </Pressable>
           </View>          {diagnostics.length > 0 && (
             <View style={styles.updateDiagnostics}>
@@ -2615,13 +2730,33 @@ function EntrySheet({
 
   function save() {
     if (!date || !type) return;
+    if (!isValidDateKey(date)) {
+      Alert.alert('日期无效', '请选择有效日期后再保存。');
+      return;
+    }
+    const todayKey = toDateKey(new Date());
+    if ((type === 'period' || type === 'periodDay' || type === 'symptom') && date > todayKey) {
+      Alert.alert('日期无效', '经期和症状记录不能使用未来日期。');
+      return;
+    }
+    if (type === 'period' && periodEnd) {
+      if (!isValidDateKey(periodEnd) || periodEnd < date || periodEnd > todayKey) {
+        Alert.alert('结束日期无效', '结束日期应在开始日期之后，且不能晚于今天。');
+        return;
+      }
+    }
+    const durationMinutes = duration ? Number(duration) : undefined;
+    if (durationMinutes !== undefined && (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440)) {
+      Alert.alert('持续时间无效', '持续时间需为 1 到 1440 分钟之间的整数。');
+      return;
+    }
     if (isSexSheet(type)) {
       const normalizedSexTypes = type === 'soloSex' ? ['自慰', ...soloTools.filter((item) => item !== 'Hand Job')] : sexTypes;
       onSaveSex({
         id: editingSexRecord?.id || uid('sex'),
         dateTime: new Date(`${date}T${time || '12:00'}:00`).toISOString(),
         count: Math.max(1, Math.min(99, Number(count) || 1)),
-        durationMinutes: duration ? Number(duration) : undefined,
+        durationMinutes,
         partnerAlias: partnerAlias.trim(),
         protectionMethods: protectionMethods.slice(0, 1),
         sexTypes: normalizedSexTypes,
@@ -2646,7 +2781,7 @@ function EntrySheet({
       onSavePeriod({
         id: editingPeriodRecord?.id || uid('period'),
         startDate: date,
-        endDate: periodEnd,
+        endDate: periodEnd || undefined,
         flow,
         painLevel: Number(pain) || 0,
         symptoms,
@@ -3002,8 +3137,9 @@ function CalendarDay({
   onPress: () => void;
 }) {
   const key = toDateKey(date);
-  const markers = getMarkersForDay(date, state, cycleInfo);
-  const tone = getCalendarTone(date, state, cycleInfo);
+  const privacyMode = state.settings.privacyMode;
+  const markers = privacyMode ? [] : getMarkersForDay(date, state, cycleInfo);
+  const tone = privacyMode ? null : getCalendarTone(date, state, cycleInfo);
   const lunar = lunarDayLabel(date);
   const isToday = key === toDateKey(new Date());
   const outside = date.getMonth() !== visibleMonth.getMonth();
@@ -3022,7 +3158,7 @@ function CalendarDay({
       onPress={onPress}
     >
       <Text style={[styles.calendarDayNumber, tone === 'period' && styles.calendarDayNumberOnTone]}>{date.getDate()}</Text>
-      <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{state.settings.privacyMode ? '' : lunar}</Text>
+      <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{privacyMode ? '' : lunar}</Text>
       <View style={styles.calendarDayMarkerSlot}>
         {eventMarker && <View style={[styles.calendarDayMarkerDot, markerStyle(eventMarker)]} />}
       </View>
@@ -3068,7 +3204,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberSetting({ label, hint, value, onChange }: { label: string; hint: string; value: number; onChange: (value: number) => void }) {
+function NumberSetting({ label, hint, value, min, max, onChange }: { label: string; hint: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   return (
     <View style={styles.settingRow}>
       <View style={styles.settingCopy}>
@@ -3081,7 +3217,7 @@ function NumberSetting({ label, hint, value, onChange }: { label: string; hint: 
         keyboardType="number-pad"
         onChangeText={(text) => {
           const next = Number(text);
-          if (!Number.isNaN(next)) onChange(next);
+          if (Number.isInteger(next) && next >= min && next <= max) onChange(next);
         }}
       />
     </View>
@@ -4329,11 +4465,8 @@ function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period'
 
 function getPeriodEndDate(state: AppState, record: PeriodRecord) {
   const start = parseDateKey(record.startDate);
-  const defaultEnd = addDays(start, initialState.settings.periodDays - 1);
-  const currentEnd = addDays(start, getAveragePeriodDays(state) - 1);
-  if (!record.endDate) return currentEnd;
-  const storedEnd = parseDateKey(record.endDate);
-  return toDateKey(storedEnd) === toDateKey(defaultEnd) ? currentEnd : storedEnd;
+  if (record.endDate) return parseDateKey(record.endDate);
+  return addDays(start, getAveragePeriodDays(state) - 1);
 }
 function getLatestPeriodRecord(state: AppState) {
   return [...state.periodRecords].sort((left, right) => left.startDate.localeCompare(right.startDate)).at(-1) || null;
@@ -4347,8 +4480,7 @@ function getOpenPeriodRecord(state: AppState) {
 function isDateInRecordedPeriod(state: AppState, date: Date, record: PeriodRecord) {
   const start = parseDateKey(record.startDate);
   const day = startOfDay(date);
-  if (!record.endDate) return day >= startOfDay(start) && day <= startOfDay(new Date());
-  const end = parseDateKey(record.endDate);
+  const end = getPeriodEndDate(state, record);
   return day >= startOfDay(start) && day <= startOfDay(end);
 }
 
@@ -4369,8 +4501,7 @@ function canStartPeriodOnDate(state: AppState, date: Date) {
   const previous = [...records].reverse().find((record) => record.startDate < key) || null;
   const next = records.find((record) => record.startDate > key) || null;
   if (previous) {
-    if (!previous.endDate) return false;
-    if (key <= previous.endDate) return false;
+    if (key <= toDateKey(getPeriodEndDate(state, previous))) return false;
   }
   if (next && key >= next.startDate) return false;
   return true;

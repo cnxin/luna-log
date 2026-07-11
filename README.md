@@ -5,7 +5,7 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 ## 当前版本
 
 - 应用版本：`1.0.8`
-- Android versionCode：`9`
+- Android versionCode：`11`
 - Android 包名：`com.anonymous.lunalog`
 - GitHub 仓库：`https://github.com/cnxin/luna-log`
 - Gitee 镜像：`https://gitee.com/ysjugg/luna-log`
@@ -21,7 +21,7 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 - 统计页：支持按周、按月、按年查看次数、持续时间和时间分布，并区分做爱 / 自慰。
 - 视觉风格：支持原版、薄荷、蓝色三套主题。
 - 数据管理：支持 JSON 数据导入/导出，本地备份和恢复。
-- 内置升级：关于页可检查更新、查看来源诊断、内置下载 APK，并显示下载来源、进度、速度和剩余时间。
+- 更新检查：关于页可检查更新、查看来源诊断，并跳转到官方发布页完成下载和安装。
 
 ## 1.0.8 更新
 
@@ -122,25 +122,19 @@ cd android
 .\gradlew.bat :app:assembleRelease
 ```
 
+Release 构建必须先配置正式签名凭据，详见 `docs/release-signing.md`。
+
 Release APK 输出位置：
 
 ```text
 android/app/build/outputs/apk/release/app-release.apk
 ```
 
-构建后回填更新清单：
+## 更新检查
 
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\update-apk-manifest.ps1 -Version 1.0.4
-```
-
-## 更新清单
-
-应用内更新中心会读取以下来源：
+应用内只读取官方 GitHub Release API，并只跳转到官方发布页完成下载和安装：
 
 ```text
-https://raw.githubusercontent.com/cnxin/luna-log/master/update-manifest.json
-https://cdn.jsdelivr.net/gh/cnxin/luna-log@master/update-manifest.json
 https://api.github.com/repos/cnxin/luna-log/releases/latest
 ```
 
@@ -151,7 +145,6 @@ https://api.github.com/repos/cnxin/luna-log/releases/latest
 - `app.json`
 - `APP_VERSION` in `App.tsx`
 - `RELEASE_NOTES` in `App.tsx`
-- `update-manifest.json`
 - Android 本地构建配置中的 `versionCode` / `versionName`
 
 ## 说明
