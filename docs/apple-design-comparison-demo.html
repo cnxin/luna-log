@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Luna Log · Apple Design 对比 Demo</title>
+  <style>
+    :root {
+      --primary: #7c8cf8;
+      --primary-light: #aeb8ff;
+      --secondary: #f5a3ae;
+      --bg: #fafbff;
+      --card: rgba(255,255,255,0.94);
+      --text: #20263a;
+      --sub: #737b91;
+      --line: rgba(124,140,248,0.12);
+      --soft: rgba(124,140,248,0.09);
+      --sex: #ff7b9c;
+      --period: #6688ff;
+      --shadow: 124, 140, 248;
+      --material: rgba(255,255,255,0.72);
+      --material-heavy: rgba(255,255,255,0.88);
+      --scrim: rgba(20,24,38,0.38);
+      --hero-1: rgba(124,140,248,0.18);
+      --hero-2: rgba(245,163,174,0.12);
+      --bubble-1: rgba(124,140,248,0.18);
+      --bubble-2: rgba(245,163,174,0.18);
+      --avatar-1: #7c8cf8;
+      --avatar-2: #f5a3ae;
+      --web-stage: #e8ebf8;
+      --phone: #141826;
+      --danger-soft: rgba(217,87,87,0.12);
+      --danger: #b94040;
+      --green: #12b886;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(124,140,248,0.18), transparent 60%),
+        radial-gradient(900px 500px at 90% 10%, rgba(245,163,174,0.14), transparent 55%),
+        var(--web-stage);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 20px 48px;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .eyebrow {
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .page-title {
+      font-size: clamp(26px, 4vw, 36px);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.1;
+    }
+    .page-sub {
+      margin-top: 8px;
+      color: var(--sub);
+      font-size: 14px;
+      line-height: 1.5;
+      max-width: 560px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .seg {
+      display: inline-flex;
+      padding: 4px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 24px rgba(var(--shadow), 0.08);
+    }
+    .seg button {
+      border: 0;
+      background: transparent;
+      color: var(--sub);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: color 160ms ease, background 160ms ease, transform 120ms ease;
+    }
+    .seg button:active { transform: scale(0.97); }
+    .seg button.active {
+      background: #fff;
+      color: var(--primary);
+      box-shadow: 0 2px 10px rgba(var(--shadow), 0.12);
+    }
+    .hint-chip {
+      font-size: 12px;
+      color: var(--sub);
+      background: rgba(255,255,255,0.65);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+    }
+
+    .legend-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--sub);
+      background: rgba(255,255,255,0.6);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 12px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .dot.before { background: #9aa3b8; }
+    .dot.after { background: var(--primary); }
+
+    .stage {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 28px;
+      align-items: start;
+    }
+    @media (max-width: 920px) {
+      .stage { grid-template-columns: 1fr; justify-items: center; }
+    }
+
+    .col-label {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .col-label h2 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .col-label p {
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--sub);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 9px;
+      border-radius: 999px;
+    }
+    .badge.before { color: #5c657a; background: rgba(0,0,0,0.06); }
+    .badge.after { color: var(--primary); background: var(--soft); }
+
+    .phone-shell {
+      width: min(390px, 100%);
+      margin: 0 auto;
+      background: var(--phone);
+      border-radius: 42px;
+      padding: 12px;
+      box-shadow:
+        0 30px 80px rgba(20,24,38,0.28),
+        0 2px 0 rgba(255,255,255,0.08) inset;
+    }
+    .phone {
+      position: relative;
+      height: 780px;
+      border-radius: 32px;
+      overflow: hidden;
+      background: var(--bg);
+      isolation: isolate;
+      touch-action: none;
+    }
+    .phone-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, var(--hero-1), var(--hero-2) 40%, var(--bg) 72%);
+      pointer-events: none;
+    }
+
+    /* Shared chrome */
+    .status {
+      position: relative;
+      z-index: 5;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 22px 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .header {
+      position: relative;
+      z-index: 5;
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 8px 20px 12px;
+    }
+    .date-label {
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .title { font-size: 28px; font-weight: 800; line-height: 1.1; letter-spacing: -0.02em; }
+    .subtitle { margin-top: 4px; color: var(--sub); font-size: 13px; line-height: 1.4; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .icon-btn, .avatar {
+      width: 44px; height: 44px; border-radius: 16px;
+      display: grid; place-items: center;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: 0 8px 20px rgba(var(--shadow), 0.1);
+      cursor: pointer;
+      user-select: none;
+    }
+    .avatar {
+      border: 0;
+      background: linear-gradient(135deg, var(--avatar-1), var(--avatar-2));
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .scroll {
+      position: relative;
+      z-index: 2;
+      height: calc(100% - 28px - 74px - 78px);
+      overflow: auto;
+      padding: 0 18px 110px;
+      scrollbar-width: none;
+    }
+    .scroll::-webkit-scrollbar { display: none; }
+
+    .hero {
+      position: relative;
+      min-height: 150px;
+      border-radius: 26px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: 0 12px 30px rgba(var(--shadow), 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: "";
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--hero-1), var(--hero-2), transparent 70%);
+      pointer-events: none;
+    }
+    .hero-copy { position: relative; flex: 1; z-index: 1; }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: var(--soft);
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .hero-title { font-size: 22px; font-weight: 900; line-height: 1.15; letter-spacing: -0.02em; }
+    .hero-hint { margin-top: 6px; color: var(--sub); font-size: 12px; line-height: 1.45; }
+    .bubble {
+      position: relative; z-index: 1;
+      width: 92px; height: 92px; border-radius: 32px;
+      display: grid; place-items: center;
+      background: linear-gradient(160deg, var(--bubble-1), var(--bubble-2));
+      text-align: center;
+    }
+    .bubble strong { display: block; font-size: 28px; font-weight: 900; letter-spacing: -0.03em; }
+    .bubble span { font-size: 10px; color: var(--sub); font-weight: 700; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .metric {
+      border-radius: 20px;
+      padding: 12px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 18px rgba(var(--shadow), 0.08);
+    }
+    .metric label { display: block; color: var(--sub); font-size: 10px; font-weight: 800; }
+    .metric b { display: block; margin-top: 4px; font-size: 20px; font-weight: 900; letter-spacing: -0.02em; }
+    .metric small { color: var(--sub); font-size: 10px; }
+
+    .section-h {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 18px 0 10px;
+    }
+    .section-h h3 { font-size: 17px; font-weight: 900; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .chip {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: var(--soft);
+      color: var(--sub);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .chip.active { background: var(--primary); color: #fff; }
+
+    .card {
+      display: flex; align-items: center; gap: 10px;
+      border-radius: 22px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 18px rgba(var(--shadow), 0.08);
+    }
+    .card-icon {
+      width: 48px; height: 48px; border-radius: 18px;
+      display: grid; place-items: center;
+      color: #fff; font-size: 18px;
+      background: linear-gradient(135deg, var(--sex), var(--primary));
+      flex: 0 0 auto;
+    }
+    .card-icon.period { background: linear-gradient(135deg, var(--period), var(--primary-light)); }
+    .card-body { flex: 1; min-width: 0; }
+    .card-title { font-size: 14px; font-weight: 900; }
+    .card-meta { margin-top: 2px; color: var(--sub); font-size: 11px; line-height: 1.35; }
+    .card-actions { display: flex; gap: 6px; }
+    .mini-btn {
+      width: 32px; height: 32px; border-radius: 12px;
+      border: 0; cursor: pointer;
+      display: grid; place-items: center;
+      font-size: 13px;
+    }
+    .mini-btn.edit { background: var(--soft); color: var(--primary); }
+    .mini-btn.del { background: var(--danger-soft); color: var(--danger); }
+
+    .bottom-nav {
+      position: absolute;
+      left: 12px; right: 12px; bottom: 12px;
+      z-index: 8;
+      height: 64px;
+      border-radius: 24px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      align-items: center;
+      border: 1px solid var(--line);
+      background: var(--card);
+      box-shadow: 0 14px 30px rgba(var(--shadow), 0.16);
+    }
+    .nav-item {
+      border: 0; background: transparent; cursor: pointer;
+      display: grid; place-items: center; gap: 2px;
+      color: var(--sub); font-size: 10px; font-weight: 800;
+      height: 100%;
+    }
+    .nav-item.active { color: var(--primary); }
+    .nav-ico { font-size: 16px; line-height: 1; }
+
+    .fab {
+      position: absolute;
+      right: 20px; bottom: 92px;
+      z-index: 9;
+      width: 58px; height: 58px; border-radius: 22px;
+      border: 0; cursor: pointer;
+      color: #fff; font-size: 28px; font-weight: 400;
+      background: linear-gradient(135deg, var(--avatar-1), var(--avatar-2));
+      box-shadow: 0 14px 28px rgba(var(--shadow), 0.35);
+      display: grid; place-items: center;
+    }
+
+    /* ===== BEFORE-specific ===== */
+    .before .title { font-weight: 900; letter-spacing: 0; }
+    .before .hero-title { font-weight: 900; }
+    .before .chip { font-weight: 900; }
+    .before .card-title { font-weight: 900; }
+
+    /* ===== AFTER-specific ===== */
+    .after .title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.022em;
+    }
+    .after .subtitle { font-weight: 500; }
+    .after .date-label { font-weight: 700; letter-spacing: 0.01em; }
+    .after .hero {
+      border-radius: 28px;
+      box-shadow: 0 16px 40px rgba(var(--shadow), 0.12);
+      border-color: rgba(255,255,255,0.5);
+    }
+    .after .hero-title {
+      font-size: 23px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    .after .pill { font-weight: 700; }
+    .after .bubble strong { font-weight: 700; letter-spacing: -0.03em; }
+    .after .metric b { font-weight: 700; }
+    .after .metric label { font-weight: 600; }
+    .after .section-h h3 { font-weight: 700; letter-spacing: -0.01em; }
+    .after .chip {
+      font-weight: 600;
+      transition: transform 120ms ease, background 160ms ease, color 160ms ease;
+    }
+    .after .chip:active { transform: scale(0.96); }
+    .after .card {
+      border-radius: 24px;
+      border-color: rgba(255,255,255,0.55);
+      box-shadow: 0 10px 24px rgba(var(--shadow), 0.1);
+      transition: transform 140ms cubic-bezier(.2,.8,.2,1);
+    }
+    .after .card-title { font-weight: 650; letter-spacing: -0.01em; }
+    .after .card-meta { font-weight: 500; }
+    .after .icon-btn, .after .avatar, .after .fab, .after .nav-item, .after .pressable {
+      transition: transform 120ms cubic-bezier(.2,.8,.2,1);
+    }
+    .after .icon-btn:active,
+    .after .avatar:active,
+    .after .fab:active,
+    .after .nav-item:active,
+    .after .pressable:active {
+      transform: scale(0.96);
+    }
+    .after .bottom-nav {
+      background: var(--material);
+      backdrop-filter: blur(22px) saturate(180%);
+      -webkit-backdrop-filter: blur(22px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.45);
+      box-shadow:
+        0 12px 32px rgba(20,24,38,0.12),
+        0 1px 0 rgba(255,255,255,0.55) inset;
+    }
+    .after .nav-item {
+      font-weight: 600;
+      position: relative;
+    }
+    .after .nav-item.active::after {
+      content: "";
+      position: absolute;
+      bottom: 8px;
+      width: 4px; height: 4px; border-radius: 50%;
+      background: var(--primary);
+    }
+    .after .scroll-edge {
+      position: absolute;
+      left: 0; right: 0; bottom: 78px;
+      height: 28px;
+      z-index: 7;
+      pointer-events: none;
+      background: linear-gradient(to top, rgba(250,251,255,0.92), transparent);
+    }
+
+    .after .filter-bar {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      margin-bottom: 10px;
+      scrollbar-width: none;
+    }
+    .after .filter-bar::-webkit-scrollbar { display: none; }
+    .after .seg-ios {
+      display: flex;
+      width: 100%;
+      padding: 3px;
+      border-radius: 14px;
+      background: rgba(124,140,248,0.1);
+      margin-bottom: 10px;
+    }
+    .after .seg-ios button {
+      flex: 1;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 9px 6px;
+      border-radius: 11px;
+      cursor: pointer;
+      transition: background 180ms ease, color 180ms ease, transform 120ms ease;
+    }
+    .after .seg-ios button.active {
+      background: #fff;
+      color: var(--primary);
+      box-shadow: 0 2px 8px rgba(var(--shadow), 0.12);
+    }
+    .after .seg-ios button:active { transform: scale(0.98); }
+
+    .after .card-actions { opacity: 0; transition: opacity 160ms ease; }
+    .after .card:hover .card-actions,
+    .after .card:focus-within .card-actions,
+    .after .card.show-actions .card-actions { opacity: 1; }
+    .after .swipe-hint {
+      font-size: 10px;
+      color: var(--sub);
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* Sheets / overlays */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .overlay.open { pointer-events: auto; }
+
+    .scrim {
+      position: absolute;
+      inset: 0;
+      background: var(--scrim);
+      opacity: 0;
+      transition: opacity 280ms ease;
+    }
+    .overlay.open .scrim { opacity: 1; }
+    .after .overlay.open .scrim { transition: none; } /* driven by drag in after */
+
+    .sheet {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      max-height: 86%;
+      border-radius: 28px 28px 0 0;
+      background: #fff;
+      box-shadow: 0 -20px 50px rgba(20,24,38,0.2);
+      transform: translateY(105%);
+      display: flex;
+      flex-direction: column;
+      will-change: transform;
+    }
+    .before .sheet {
+      transition: transform 320ms cubic-bezier(.2,.8,.2,1);
+    }
+    .before .overlay.open .sheet {
+      transform: translateY(0);
+    }
+    .after .sheet {
+      background: var(--material-heavy);
+      backdrop-filter: blur(28px) saturate(180%);
+      -webkit-backdrop-filter: blur(28px) saturate(180%);
+      border-top: 1px solid rgba(255,255,255,0.55);
+      box-shadow:
+        0 -24px 60px rgba(20,24,38,0.22),
+        0 1px 0 rgba(255,255,255,0.7) inset;
+      transition: none; /* JS spring */
+    }
+
+    .handle-wrap {
+      padding: 10px 0 4px;
+      display: grid;
+      place-items: center;
+      cursor: grab;
+      touch-action: none;
+    }
+    .handle {
+      width: 40px; height: 5px; border-radius: 999px;
+      background: rgba(0,0,0,0.12);
+    }
+    .sheet-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 12px;
+      padding: 4px 18px 10px;
+    }
+    .sheet-kicker {
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+    .sheet-title {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+    .after .sheet-title { font-weight: 700; }
+    .close-btn {
+      width: 36px; height: 36px; border-radius: 14px;
+      border: 0; background: var(--soft); color: var(--sub);
+      cursor: pointer; font-size: 18px;
+      display: grid; place-items: center;
+    }
+
+    .sheet-body {
+      overflow: auto;
+      padding: 4px 18px 18px;
+      flex: 1;
+    }
+    .field {
+      margin-bottom: 12px;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--sub);
+      margin-bottom: 6px;
+    }
+    .after .field label { font-weight: 600; }
+    .field input, .field textarea, .fake-input {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.9);
+      border-radius: 16px;
+      padding: 12px 14px;
+      font: inherit;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+    }
+    .field textarea { min-height: 72px; resize: none; }
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .switch-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .switch-row:last-child { border-bottom: 0; }
+    .switch-copy b { display: block; font-size: 14px; font-weight: 800; }
+    .after .switch-copy b { font-weight: 600; }
+    .switch-copy span { color: var(--sub); font-size: 11px; }
+    .toggle {
+      width: 46px; height: 28px; border-radius: 999px;
+      background: rgba(0,0,0,0.12);
+      position: relative;
+      cursor: pointer;
+      transition: background 180ms ease;
+      flex: 0 0 auto;
+    }
+    .toggle.on { background: var(--primary); }
+    .toggle i {
+      position: absolute; top: 3px; left: 3px;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.18);
+      transition: transform 180ms cubic-bezier(.2,.8,.2,1);
+    }
+    .toggle.on i { transform: translateX(18px); }
+
+    .rating {
+      display: flex; gap: 6px;
+    }
+    .star {
+      width: 36px; height: 36px; border-radius: 12px;
+      border: 0; background: var(--soft);
+      cursor: pointer; font-size: 16px;
+    }
+    .star.on { background: rgba(255,123,156,0.16); }
+
+    .primary-btn {
+      width: 100%;
+      border: 0;
+      border-radius: 18px;
+      padding: 15px;
+      color: #fff;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--avatar-1), var(--avatar-2));
+      box-shadow: 0 10px 24px rgba(var(--shadow), 0.28);
+      margin-top: 8px;
+    }
+    .after .primary-btn { font-weight: 650; letter-spacing: -0.01em; }
+
+    .after .sheet-sticky {
+      position: sticky;
+      bottom: 0;
+      padding: 10px 0 4px;
+      background: linear-gradient(to top, rgba(255,255,255,0.96) 60%, transparent);
+    }
+
+    .details {
+      border-radius: 18px;
+      background: rgba(124,140,248,0.06);
+      border: 1px solid var(--line);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .details summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 13px 14px;
+      font-size: 13px;
+      font-weight: 650;
+      color: var(--primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .details summary::-webkit-details-marker { display: none; }
+    .details[open] summary { border-bottom: 1px solid var(--line); }
+    .details .details-body { padding: 8px 14px 12px; }
+    .details .chev { transition: transform 200ms ease; }
+    .details[open] .chev { transform: rotate(180deg); }
+
+    .snack {
+      position: absolute;
+      left: 18px; right: 18px;
+      bottom: 88px;
+      z-index: 15;
+      border-radius: 16px;
+      padding: 12px 14px;
+      background: rgba(32,38,58,0.92);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.2);
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+    .snack.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .after .snack {
+      background: var(--material-heavy);
+      color: var(--text);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.5);
+    }
+
+    .fab-menu {
+      position: absolute;
+      right: 20px;
+      bottom: 160px;
+      z-index: 10;
+      display: grid;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px) scale(0.96);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .fab-menu.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+    .fab-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      cursor: pointer;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 10px 12px;
+      box-shadow: 0 10px 24px rgba(var(--shadow), 0.14);
+      text-align: left;
+      min-width: 190px;
+    }
+    .fab-ico {
+      width: 34px; height: 34px; border-radius: 12px;
+      display: grid; place-items: center;
+      color: #fff; font-size: 14px;
+      background: linear-gradient(135deg, var(--sex), var(--primary));
+    }
+    .fab-item b { display: block; font-size: 13px; font-weight: 800; }
+    .after .fab-item b { font-weight: 650; }
+    .fab-item span { color: var(--sub); font-size: 11px; }
+
+    .callouts {
+      margin-top: 28px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 920px) {
+      .callouts { grid-template-columns: 1fr; }
+    }
+    .callout {
+      background: rgba(255,255,255,0.7);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 24px rgba(var(--shadow), 0.06);
+    }
+    .callout h4 {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+    .callout p {
+      font-size: 12px;
+      color: var(--sub);
+      line-height: 1.5;
+    }
+    .callout kbd {
+      display: inline-block;
+      font-size: 11px;
+      background: var(--soft);
+      color: var(--primary);
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-family: inherit;
+      font-weight: 700;
+    }
+
+    .theme-mint {
+      --primary: #20c7ad;
+      --primary-light: #9be9dc;
+      --secondary: #74b9ef;
+      --bg: #effff8;
+      --text: #173734;
+      --sub: #5f7f7a;
+      --line: rgba(32,199,173,0.14);
+      --soft: rgba(32,199,173,0.12);
+      --sex: #ff8fb1;
+      --period: #62aef6;
+      --shadow: 18, 184, 134;
+      --hero-1: rgba(126,223,208,0.32);
+      --hero-2: rgba(123,189,242,0.18);
+      --bubble-1: rgba(126,223,208,0.38);
+      --bubble-2: rgba(123,189,242,0.28);
+      --avatar-1: #68d8c8;
+      --avatar-2: #74b9ef;
+      --web-stage: #e7fff8;
+      --phone: #103d3a;
+    }
+    .theme-blue {
+      --primary: #0f77d8;
+      --primary-light: #8ed8ff;
+      --secondary: #35c9ff;
+      --bg: #eaf6ff;
+      --text: #10223f;
+      --sub: #5d7291;
+      --line: rgba(15,119,216,0.13);
+      --soft: rgba(53,201,255,0.12);
+      --sex: #ff87ba;
+      --period: #3f7dff;
+      --shadow: 15, 119, 216;
+      --hero-1: rgba(15,119,216,0.18);
+      --hero-2: rgba(53,201,255,0.16);
+      --bubble-1: rgba(15,119,216,0.18);
+      --bubble-2: rgba(53,201,255,0.2);
+      --avatar-1: #0f77d8;
+      --avatar-2: #35c9ff;
+      --web-stage: #dceeff;
+      --phone: #06173a;
+    }
+
+    .reduced .after .chip,
+    .reduced .after .card,
+    .reduced .after .icon-btn,
+    .reduced .after .avatar,
+    .reduced .after .fab,
+    .reduced .after .nav-item,
+    .reduced .after .pressable,
+    .reduced .after .seg-ios button {
+      transition: none !important;
+    }
+    .reduced .after .bottom-nav,
+    .reduced .after .sheet,
+    .reduced .after .snack {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      background: #fff !important;
+    }
+
+    .insert-pop {
+      animation: insertPop 420ms cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes insertPop {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+  <div class="page" id="page">
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">Luna Log · UI Comparison</div>
+        <h1 class="page-title">Apple Design 优化对比 Demo</h1>
+        <p class="page-sub">
+          左侧为当前交互手感，右侧按 Apple fluid interface 原则重做：可中断 Sheet、速度继承、材质底栏、按下反馈、表单分层与字重精修。
+        </p>
+      </div>
+      <div class="controls">
+        <div class="seg" id="themeSeg" role="tablist" aria-label="主题">
+          <button type="button" class="active" data-theme="classic">原版</button>
+          <button type="button" data-theme="mint">薄荷</button>
+          <button type="button" data-theme="blue">蓝色</button>
+        </div>
+        <button type="button" class="hint-chip" id="reduceBtn" title="模拟 prefers-reduced-motion">减少动态效果：关</button>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <div class="legend-item"><span class="dot before"></span>当前：Modal slide / 固定动画 / 实心底栏</div>
+      <div class="legend-item"><span class="dot after"></span>优化：可拖拽 spring / 按下缩放 / 半透明材质</div>
+    </div>
+
+    <div class="stage">
+      <!-- BEFORE -->
+      <div>
+        <div class="col-label">
+          <div class="badge before">BEFORE · 当前</div>
+          <h2>现状手感</h2>
+          <p>animationType=slide · 字重 900 · 表单一屏塞满</p>
+        </div>
+        <div class="phone-shell">
+          <div class="phone before" id="phoneBefore">
+            <div class="phone-bg"></div>
+            <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="header">
+              <div>
+                <div class="date-label">7月12日 星期日</div>
+                <div class="title">下午好</div>
+                <div class="subtitle">从今天的一次小记录开始</div>
+              </div>
+              <div class="header-actions">
+                <button class="icon-btn" type="button" aria-label="隐私">👁</button>
+                <button class="avatar" type="button">i</button>
+              </div>
+            </div>
+            <div class="scroll">
+              <div class="hero">
+                <div class="hero-copy">
+                  <div class="pill">周期第 12 天</div>
+                  <div class="hero-title">易孕期附近</div>
+                  <div class="hero-hint">预测下次经期约 7 月 26 日</div>
+                </div>
+                <div class="bubble"><div><strong>12</strong><span>周期日</span></div></div>
+              </div>
+              <div class="metrics">
+                <div class="metric"><label>本月</label><b>4</b><small>亲密次数</small></div>
+                <div class="metric"><label>间隔</label><b>3.5</b><small>平均天数</small></div>
+                <div class="metric"><label>周期</label><b>28</b><small>预测天数</small></div>
+              </div>
+              <div class="section-h"><h3>最近记录</h3></div>
+              <div class="chips" id="beforeChips">
+                <button class="chip active" type="button">一周</button>
+                <button class="chip" type="button">一月</button>
+                <button class="chip" type="button">半年</button>
+                <button class="chip" type="button">一年</button>
+                <button class="chip" type="button">全部</button>
+                <button class="chip" type="button">自定义</button>
+              </div>
+              <div class="chips">
+                <button class="chip active" type="button">全部 3</button>
+                <button class="chip" type="button">亲密 2</button>
+                <button class="chip" type="button">经期 1</button>
+                <button class="chip" type="button">症状 0</button>
+              </div>
+              <div id="beforeList">
+                <div class="card">
+                  <div class="card-icon">♥</div>
+                  <div class="card-body">
+                    <div class="card-title">伴侣亲密 · 昨晚</div>
+                    <div class="card-meta">28 分钟 · 评分 4 · 安全套</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-icon">✦</div>
+                  <div class="card-body">
+                    <div class="card-title">个人亲密 · 周五</div>
+                    <div class="card-meta">12 分钟 · 评分 3</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+                <div class="card">
+                  <div class="card-icon period">💧</div>
+                  <div class="card-body">
+                    <div class="card-title">经期 · 6月28日</div>
+                    <div class="card-meta">5 天 · 流量中 · 轻度痛经</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="fab-menu" id="beforeFabMenu">
+              <button class="fab-item" type="button" data-open-before>
+                <span class="fab-ico">♥</span>
+                <span><b>伴侣亲密</b><span>伴侣、保护、姿势和心情</span></span>
+              </button>
+              <button class="fab-item" type="button" data-open-before>
+                <span class="fab-ico" style="background:linear-gradient(135deg,var(--primary),var(--secondary))">✦</span>
+                <span><b>个人亲密</b><span>道具、观看、高潮和评分</span></span>
+              </button>
+            </div>
+            <button class="fab" id="beforeFab" type="button">+</button>
+            <div class="bottom-nav">
+              <button class="nav-item active" type="button"><span class="nav-ico">⌂</span>首页</button>
+              <button class="nav-item" type="button"><span class="nav-ico">▦</span>日历</button>
+              <button class="nav-item" type="button"><span class="nav-ico">▤</span>统计</button>
+              <button class="nav-item" type="button"><span class="nav-ico">⚙</span>设置</button>
+            </div>
+            <div class="snack" id="beforeSnack">已保存记录</div>
+
+            <div class="overlay" id="beforeOverlay">
+              <div class="scrim" id="beforeScrim"></div>
+              <div class="sheet" id="beforeSheet">
+                <div class="handle-wrap"><div class="handle"></div></div>
+                <div class="sheet-header">
+                  <div>
+                    <div class="sheet-kicker">亲密生活</div>
+                    <div class="sheet-title">伴侣亲密记录</div>
+                  </div>
+                  <button class="close-btn" type="button" id="beforeClose">×</button>
+                </div>
+                <div class="sheet-body">
+                  <div class="row-2">
+                    <div class="field"><label>日期</label><div class="fake-input">2026-07-12</div></div>
+                    <div class="field"><label>时间</label><div class="fake-input">22:30</div></div>
+                  </div>
+                  <div class="row-2">
+                    <div class="field"><label>持续时间</label><div class="fake-input">28 分钟</div></div>
+                    <div class="field"><label>次数</label><div class="fake-input">1</div></div>
+                  </div>
+                  <div class="field"><label>伴侣</label><input value="A" readonly /></div>
+                  <div class="field"><label>地点</label><input value="家" readonly /></div>
+                  <div class="field">
+                    <label>高潮信息</label>
+                    <div class="switch-row"><div class="switch-copy"><b>高潮</b><span>滑动开关来选择是否高潮</span></div><div class="toggle on"><i></i></div></div>
+                    <div class="switch-row"><div class="switch-copy"><b>伴侣高潮</b><span>滑动开关来选择伴侣是否高潮</span></div><div class="toggle"><i></i></div></div>
+                    <div class="switch-row"><div class="switch-copy"><b>潮吹</b><span>滑动开关来选择是否潮吹</span></div><div class="toggle"><i></i></div></div>
+                    <div class="switch-row"><div class="switch-copy"><b>道具</b><span>滑动开关来选择是否使用道具</span></div><div class="toggle"><i></i></div></div>
+                  </div>
+                  <div class="field"><label>保护措施</label><div class="chips"><span class="chip active">安全套</span><span class="chip">药物</span><span class="chip">无保护</span></div></div>
+                  <div class="field"><label>姿势</label><div class="chips"><span class="chip active">骑乘</span><span class="chip">后入</span><span class="chip">侧躺</span><span class="chip">跪姿</span></div></div>
+                  <div class="field"><label>谁发起的</label><div class="chips"><span class="chip active">你自己</span><span class="chip">伴侣</span></div></div>
+                  <div class="switch-row"><div class="switch-copy"><b>情趣内衣</b><span>滑动开关来选择是否穿戴</span></div><div class="toggle"><i></i></div></div>
+                  <div class="field"><label>评分</label><div class="rating"><button class="star on" type="button">★</button><button class="star on" type="button">★</button><button class="star on" type="button">★</button><button class="star on" type="button">★</button><button class="star" type="button">★</button></div></div>
+                  <div class="field"><label>心情</label><div class="chips"><span class="chip active">放松</span><span class="chip">开心</span><span class="chip">亲密</span></div></div>
+                  <div class="switch-row"><div class="switch-copy"><b>同步</b><span>滑动开关来选择是否同步到伴侣记录</span></div><div class="toggle"><i></i></div></div>
+                  <div class="field"><label>备注</label><textarea readonly>只保存在本地</textarea></div>
+                  <button class="primary-btn" type="button" id="beforeSave">保存记录</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AFTER -->
+      <div>
+        <div class="col-label">
+          <div class="badge after">AFTER · Apple Design</div>
+          <h2>优化后手感</h2>
+          <p>可拖拽中断 · 材质层级 · 主路径更短</p>
+        </div>
+        <div class="phone-shell">
+          <div class="phone after" id="phoneAfter">
+            <div class="phone-bg"></div>
+            <div class="status"><span>9:41</span><span>▮▮▮</span></div>
+            <div class="header">
+              <div>
+                <div class="date-label">7月12日 星期日</div>
+                <div class="title">下午好</div>
+                <div class="subtitle">从今天的一次小记录开始</div>
+              </div>
+              <div class="header-actions">
+                <button class="icon-btn pressable" type="button" aria-label="隐私">👁</button>
+                <button class="avatar pressable" type="button">i</button>
+              </div>
+            </div>
+            <div class="scroll" id="afterScroll">
+              <div class="hero">
+                <div class="hero-copy">
+                  <div class="pill">周期第 12 天</div>
+                  <div class="hero-title">易孕期附近</div>
+                  <div class="hero-hint">预测下次经期约 7 月 26 日</div>
+                </div>
+                <div class="bubble"><div><strong>12</strong><span>周期日</span></div></div>
+              </div>
+              <div class="metrics">
+                <div class="metric"><label>本月</label><b>4</b><small>亲密次数</small></div>
+                <div class="metric"><label>间隔</label><b>3.5</b><small>平均天数</small></div>
+                <div class="metric"><label>周期</label><b>28</b><small>预测天数</small></div>
+              </div>
+              <div class="section-h"><h3>最近记录</h3></div>
+              <div class="seg-ios" id="afterRange">
+                <button type="button" class="active">一周</button>
+                <button type="button">一月</button>
+                <button type="button">半年</button>
+                <button type="button">一年</button>
+                <button type="button">全部</button>
+              </div>
+              <div class="filter-bar" id="afterTypes">
+                <button class="chip active pressable" type="button">全部 3</button>
+                <button class="chip pressable" type="button">亲密 2</button>
+                <button class="chip pressable" type="button">经期 1</button>
+                <button class="chip pressable" type="button">症状 0</button>
+              </div>
+              <div id="afterList">
+                <div class="card pressable">
+                  <div class="card-icon">♥</div>
+                  <div class="card-body">
+                    <div class="card-title">伴侣亲密 · 昨晚</div>
+                    <div class="card-meta">28 分钟 · 评分 4 · 安全套</div>
+                    <div class="swipe-hint">悬停 / 聚焦显示操作</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+                <div class="card pressable">
+                  <div class="card-icon">✦</div>
+                  <div class="card-body">
+                    <div class="card-title">个人亲密 · 周五</div>
+                    <div class="card-meta">12 分钟 · 评分 3</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+                <div class="card pressable">
+                  <div class="card-icon period">💧</div>
+                  <div class="card-body">
+                    <div class="card-title">经期 · 6月28日</div>
+                    <div class="card-meta">5 天 · 流量中 · 轻度痛经</div>
+                  </div>
+                  <div class="card-actions">
+                    <button class="mini-btn edit" type="button">✎</button>
+                    <button class="mini-btn del" type="button">🗑</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="scroll-edge"></div>
+
+            <div class="fab-menu" id="afterFabMenu">
+              <button class="fab-item pressable" type="button" data-open-after>
+                <span class="fab-ico">♥</span>
+                <span><b>伴侣亲密</b><span>常用项先填，细节可展开</span></span>
+              </button>
+              <button class="fab-item pressable" type="button" data-open-after>
+                <span class="fab-ico" style="background:linear-gradient(135deg,var(--primary),var(--secondary))">✦</span>
+                <span><b>个人亲密</b><span>更短主路径</span></span>
+              </button>
+            </div>
+            <button class="fab pressable" id="afterFab" type="button">+</button>
+            <div class="bottom-nav">
+              <button class="nav-item active" type="button"><span class="nav-ico">⌂</span>首页</button>
+              <button class="nav-item" type="button"><span class="nav-ico">▦</span>日历</button>
+              <button class="nav-item" type="button"><span class="nav-ico">▤</span>统计</button>
+              <button class="nav-item" type="button"><span class="nav-ico">⚙</span>设置</button>
+            </div>
+            <div class="snack" id="afterSnack">已保存 · 仅保存在本机</div>
+
+            <div class="overlay" id="afterOverlay">
+              <div class="scrim" id="afterScrim"></div>
+              <div class="sheet" id="afterSheet">
+                <div class="handle-wrap" id="afterHandle"><div class="handle"></div></div>
+                <div class="sheet-header">
+                  <div>
+                    <div class="sheet-kicker">亲密生活</div>
+                    <div class="sheet-title">伴侣亲密</div>
+                  </div>
+                  <button class="close-btn pressable" type="button" id="afterClose">×</button>
+                </div>
+                <div class="sheet-body" id="afterSheetBody">
+                  <div class="row-2">
+                    <div class="field"><label>日期</label><div class="fake-input">2026-07-12</div></div>
+                    <div class="field"><label>时间</label><div class="fake-input">22:30</div></div>
+                  </div>
+                  <div class="row-2">
+                    <div class="field"><label>持续时间</label><div class="fake-input">28 分钟</div></div>
+                    <div class="field"><label>次数</label><div class="fake-input">1</div></div>
+                  </div>
+                  <div class="field">
+                    <label>保护措施</label>
+                    <div class="chips">
+                      <button class="chip active pressable" type="button">安全套</button>
+                      <button class="chip pressable" type="button">药物</button>
+                      <button class="chip pressable" type="button">无保护</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>评分</label>
+                    <div class="rating">
+                      <button class="star on pressable" type="button">★</button>
+                      <button class="star on pressable" type="button">★</button>
+                      <button class="star on pressable" type="button">★</button>
+                      <button class="star on pressable" type="button">★</button>
+                      <button class="star pressable" type="button">★</button>
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>心情</label>
+                    <div class="chips">
+                      <button class="chip active pressable" type="button">放松</button>
+                      <button class="chip pressable" type="button">开心</button>
+                      <button class="chip pressable" type="button">亲密</button>
+                    </div>
+                  </div>
+
+                  <details class="details" id="moreDetails">
+                    <summary>更多细节 <span class="chev">▾</span></summary>
+                    <div class="details-body">
+                      <div class="field"><label>伴侣</label><input value="A" readonly /></div>
+                      <div class="field"><label>地点</label><input value="家" readonly /></div>
+                      <div class="switch-row"><div class="switch-copy"><b>高潮</b><span>是否高潮</span></div><div class="toggle on"><i></i></div></div>
+                      <div class="switch-row"><div class="switch-copy"><b>伴侣高潮</b><span>伴侣是否高潮</span></div><div class="toggle"><i></i></div></div>
+                      <div class="field"><label>姿势</label><div class="chips"><span class="chip active">骑乘</span><span class="chip">后入</span><span class="chip">侧躺</span></div></div>
+                      <div class="field"><label>谁发起</label><div class="chips"><span class="chip active">你自己</span><span class="chip">伴侣</span></div></div>
+                      <div class="field"><label>备注</label><textarea readonly>只保存在本地</textarea></div>
+                    </div>
+                  </details>
+
+                  <div class="sheet-sticky">
+                    <button class="primary-btn pressable" type="button" id="afterSave">保存记录</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div class="callout">
+        <h4>1. 打开 Sheet 对比</h4>
+        <p>两边都点右下角 <kbd>+</kbd> →「伴侣亲密」。左侧是固定 slide；右侧可按住顶部把手下拖，松手会按速度吸附打开/关闭。</p>
+      </div>
+      <div class="callout">
+        <h4>2. 中断与速度继承</h4>
+        <p>右侧在打开动画播放中途再次抓住 Sheet 下拉——应立即跟随手指，而不是播完再响应。</p>
+      </div>
+      <div class="callout">
+        <h4>3. 表单与材质</h4>
+        <p>右侧主路径只需日期/时长/保护/评分/心情；细节折叠。底栏为半透明 blur，内容可从下方穿过。</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ---------- Theme ---------- */
+    const page = document.getElementById('page');
+    document.querySelectorAll('#themeSeg button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#themeSeg button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        page.classList.remove('theme-mint', 'theme-blue');
+        if (btn.dataset.theme === 'mint') page.classList.add('theme-mint');
+        if (btn.dataset.theme === 'blue') page.classList.add('theme-blue');
+      });
+    });
+
+    let reduced = false;
+    const reduceBtn = document.getElementById('reduceBtn');
+    reduceBtn.addEventListener('click', () => {
+      reduced = !reduced;
+      document.body.classList.toggle('reduced', reduced);
+      reduceBtn.textContent = `减少动态效果：${reduced ? '开' : '关'}`;
+    });
+
+    /* ---------- Chip toggles ---------- */
+    function wireChips(root) {
+      root.querySelectorAll('.chips').forEach((group) => {
+        group.querySelectorAll('.chip').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            if (!chip.closest('.chips')) return;
+            // single-select for demo groups that look like filters
+            const siblings = chip.parentElement.querySelectorAll('.chip');
+            if (siblings.length && chip.tagName === 'BUTTON') {
+              siblings.forEach((s) => s.classList.remove('active'));
+              chip.classList.add('active');
+            }
+          });
+        });
+      });
+    }
+    wireChips(document);
+
+    document.querySelectorAll('#afterRange button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#afterRange button').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+    document.querySelectorAll('#afterTypes .chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#afterTypes .chip').forEach((c) => c.classList.remove('active'));
+        chip.classList.add('active');
+      });
+    });
+
+    /* ---------- Toggles ---------- */
+    document.querySelectorAll('.toggle').forEach((t) => {
+      t.addEventListener('click', () => t.classList.toggle('on'));
+    });
+
+    /* ---------- FAB menus ---------- */
+    function wireFab(fabId, menuId) {
+      const fab = document.getElementById(fabId);
+      const menu = document.getElementById(menuId);
+      fab.addEventListener('click', () => {
+        const open = menu.classList.toggle('open');
+        fab.textContent = open ? '×' : '+';
+      });
+    }
+    wireFab('beforeFab', 'beforeFabMenu');
+    wireFab('afterFab', 'afterFabMenu');
+
+    /* ---------- BEFORE sheet: fixed slide ---------- */
+    const beforeOverlay = document.getElementById('beforeOverlay');
+    const beforeSnack = document.getElementById('beforeSnack');
+    function openBefore() {
+      document.getElementById('beforeFabMenu').classList.remove('open');
+      document.getElementById('beforeFab').textContent = '+';
+      beforeOverlay.classList.add('open');
+    }
+    function closeBefore() {
+      beforeOverlay.classList.remove('open');
+    }
+    document.querySelectorAll('[data-open-before]').forEach((el) => el.addEventListener('click', openBefore));
+    document.getElementById('beforeClose').addEventListener('click', closeBefore);
+    document.getElementById('beforeScrim').addEventListener('click', closeBefore);
+    document.getElementById('beforeSave').addEventListener('click', () => {
+      closeBefore();
+      beforeSnack.classList.add('show');
+      setTimeout(() => beforeSnack.classList.remove('show'), 1600);
+    });
+
+    /* ---------- AFTER sheet: spring + interruptible drag ---------- */
+    const afterOverlay = document.getElementById('afterOverlay');
+    const afterSheet = document.getElementById('afterSheet');
+    const afterScrim = document.getElementById('afterScrim');
+    const afterHandle = document.getElementById('afterHandle');
+    const afterSnack = document.getElementById('afterSnack');
+    const afterList = document.getElementById('afterList');
+
+    // y = 0 open, y = sheetHeight closed
+    let sheetH = 0;
+    let y = 0;
+    let vy = 0;
+    let targetY = 0;
+    let dragging = false;
+    let openState = false;
+    let raf = 0;
+    let lastT = 0;
+    let lastY = 0;
+    let lastMoveT = 0;
+    let grabStartY = 0;
+    let grabStartSheetY = 0;
+    let gestureVel = 0;
+
+    const OPEN_Y = 0;
+    function closedY() {
+      return sheetH || afterSheet.offsetHeight || 640;
+    }
+
+    function setVisual(currentY) {
+      const closed = closedY();
+      const progress = 1 - Math.min(1, Math.max(0, currentY / closed));
+      afterSheet.style.transform = `translateY(${currentY}px)`;
+      afterScrim.style.opacity = String(0.42 * progress);
+    }
+
+    // critically damped-ish spring (Apple default: damping 1.0)
+    function stepSpring(now) {
+      if (!lastT) lastT = now;
+      const dt = Math.min(0.032, (now - lastT) / 1000);
+      lastT = now;
+
+      if (!dragging) {
+        // response ~0.32s, critically damped
+        const stiffness = reduced ? 180 : 140;
+        const damping = reduced ? 28 : 22;
+        const x = y - targetY;
+        const a = -stiffness * x - damping * vy;
+        vy += a * dt;
+        y += vy * dt;
+        if (Math.abs(x) < 0.15 && Math.abs(vy) < 2) {
+          y = targetY;
+          vy = 0;
+          if (targetY >= closedY() - 1) {
+            afterOverlay.classList.remove('open');
+            openState = false;
+          }
+        }
+      }
+
+      setVisual(y);
+      if (dragging || Math.abs(y - targetY) > 0.15 || Math.abs(vy) > 0.5) {
+        raf = requestAnimationFrame(stepSpring);
+      } else {
+        raf = 0;
+        lastT = 0;
+      }
+    }
+
+    function ensureLoop() {
+      if (!raf) {
+        lastT = 0;
+        raf = requestAnimationFrame(stepSpring);
+      }
+    }
+
+    function measure() {
+      sheetH = afterSheet.offsetHeight;
+    }
+
+    function openAfter() {
+      document.getElementById('afterFabMenu').classList.remove('open');
+      document.getElementById('afterFab').textContent = '+';
+      afterOverlay.classList.add('open');
+      measure();
+      // start from closed, animate to open — from presentation value
+      if (!openState) {
+        y = closedY();
+        vy = 0;
+      }
+      // if already partially open, continue from current y (interruptible)
+      targetY = OPEN_Y;
+      openState = true;
+      ensureLoop();
+    }
+
+    function closeAfter(withVelocity = 0) {
+      measure();
+      targetY = closedY();
+      // hand off release velocity
+      if (withVelocity) vy = withVelocity;
+      openState = true; // stays open until spring settles closed
+      afterOverlay.classList.add('open');
+      ensureLoop();
+    }
+
+    // Apple projection for snap decision
+    function project(velocity, decelerationRate = 0.998) {
+      return (velocity / 1000) * decelerationRate / (1 - decelerationRate);
+    }
+
+    function rubberband(overshoot, dimension, constant = 0.55) {
+      return (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
+    }
+
+    function onPointerDown(e) {
+      if (reduced) return; // still allow drag, but simpler
+      measure();
+      dragging = true;
+      afterOverlay.classList.add('open');
+      grabStartY = e.clientY;
+      grabStartSheetY = y;
+      lastY = e.clientY;
+      lastMoveT = performance.now();
+      gestureVel = 0;
+      vy = 0;
+      afterHandle.setPointerCapture?.(e.pointerId);
+      ensureLoop();
+      e.preventDefault();
+    }
+
+    function onPointerMove(e) {
+      if (!dragging) return;
+      const now = performance.now();
+      const dy = e.clientY - grabStartY;
+      let next = grabStartSheetY + dy;
+      // rubber-band above open
+      if (next < 0) {
+        next = -rubberband(-next, sheetH || 600);
+      }
+      // soft resist past closed a bit
+      const closed = closedY();
+      if (next > closed) {
+        next = closed + rubberband(next - closed, sheetH || 600);
+      }
+      const dt = Math.max(1, now - lastMoveT);
+      gestureVel = ((e.clientY - lastY) / dt) * 1000; // px/s
+      lastY = e.clientY;
+      lastMoveT = now;
+      y = next;
+      setVisual(y);
+    }
+
+    function onPointerUp() {
+      if (!dragging) return;
+      dragging = false;
+      measure();
+      const closed = closedY();
+      // project resting point from velocity, then snap
+      const projected = y + project(gestureVel);
+      const shouldClose = projected > closed * 0.35 || gestureVel > 700;
+      targetY = shouldClose ? closed : OPEN_Y;
+      // velocity handoff
+      vy = gestureVel;
+      openState = true;
+      ensureLoop();
+    }
+
+    afterHandle.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    // also allow dragging sheet header area
+    afterSheet.querySelector('.sheet-header').addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      onPointerDown(e);
+    });
+
+    document.querySelectorAll('[data-open-after]').forEach((el) => el.addEventListener('click', openAfter));
+    document.getElementById('afterClose').addEventListener('click', () => closeAfter(0));
+    afterScrim.addEventListener('click', () => closeAfter(0));
+
+    document.getElementById('afterSave').addEventListener('click', () => {
+      closeAfter(900);
+      afterSnack.classList.add('show');
+      setTimeout(() => afterSnack.classList.remove('show'), 1800);
+      // insert animation for new card
+      const card = document.createElement('div');
+      card.className = 'card pressable insert-pop show-actions';
+      card.innerHTML = `
+        <div class="card-icon">♥</div>
+        <div class="card-body">
+          <div class="card-title">伴侣亲密 · 刚刚</div>
+          <div class="card-meta">28 分钟 · 评分 4 · 安全套</div>
+        </div>
+        <div class="card-actions">
+          <button class="mini-btn edit" type="button">✎</button>
+          <button class="mini-btn del" type="button">🗑</button>
+        </div>`;
+      afterList.prepend(card);
+      setTimeout(() => card.classList.remove('show-actions'), 1200);
+    });
+
+    // init after sheet off-screen
+    requestAnimationFrame(() => {
+      measure();
+      y = closedY();
+      targetY = y;
+      setVisual(y);
+    });
+
+    // interrupt demo: if user opens and immediately grabs mid-flight it just works
+    // because openAfter sets target and drag overwrites y from presentation value
+
+    // star toggles
+    document.querySelectorAll('.rating').forEach((row) => {
+      const stars = [...row.querySelectorAll('.star')];
+      stars.forEach((star, idx) => {
+        star.addEventListener('click', () => {
+          stars.forEach((s, i) => s.classList.toggle('on', i <= idx));
+        });
+      });
+    });
+  </script>
+</body>
+</html>

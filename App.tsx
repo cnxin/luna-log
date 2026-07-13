@@ -16,7 +16,7 @@ import {
   persistStoredAppData,
   type ProtectionSettings,
 } from './src/storage/secureAppStorage';
-import {
+import { AppleSheet, AnimatedBar, FadeSlideIn, Material, PressScale, ScaleOnSelect, hapticMedium, hapticSelection, hapticSuccess, hapticWarning } from './src/ui';import {
   Activity,
   Download,
   ExternalLink,
@@ -370,6 +370,11 @@ type ThemePalette = {
   shadow: string;
   webStage: string;
   phoneFrame: string;
+  material: string;
+  materialHeavy: string;
+  segmentTrack: string;
+  segmentActive: string;
+  scrim: string;
   appGradient: readonly [string, string, string];
   heroGradient: readonly [string, string, string];
   bubbleGradient: readonly [string, string];
@@ -397,6 +402,11 @@ const themePalettes: Record<ThemeStyle, ThemePalette> = {
     shadow: '#7c8cf8',
     webStage: '#eef1ff',
     phoneFrame: '#141826',
+    material: 'rgba(255,255,255,0.72)',
+    materialHeavy: 'rgba(255,255,255,0.9)',
+    segmentTrack: 'rgba(124,140,248,0.12)',
+    segmentActive: '#ffffff',
+    scrim: 'rgba(20,24,38,0.42)',
     appGradient: ['rgba(124,140,248,0.12)', 'rgba(245,163,174,0.11)', '#fafbff'],
     heroGradient: ['rgba(124,140,248,0.18)', 'rgba(245,163,174,0.12)', 'rgba(255,255,255,0.94)'],
     bubbleGradient: ['rgba(124,140,248,0.18)', 'rgba(245,163,174,0.18)'],
@@ -422,6 +432,11 @@ const themePalettes: Record<ThemeStyle, ThemePalette> = {
     shadow: '#12b886',
     webStage: '#e7fff8',
     phoneFrame: '#103d3a',
+    material: 'rgba(255,255,255,0.74)',
+    materialHeavy: 'rgba(255,255,255,0.92)',
+    segmentTrack: 'rgba(32,199,173,0.14)',
+    segmentActive: '#ffffff',
+    scrim: 'rgba(16,61,58,0.38)',
     appGradient: ['rgba(140,239,216,0.32)', 'rgba(77,171,247,0.22)', '#effff8'],
     heroGradient: ['rgba(126,223,208,0.32)', 'rgba(123,189,242,0.18)', 'rgba(255,255,255,0.94)'],
     bubbleGradient: ['rgba(126,223,208,0.38)', 'rgba(123,189,242,0.28)'],
@@ -447,6 +462,11 @@ const themePalettes: Record<ThemeStyle, ThemePalette> = {
     shadow: '#0f77d8',
     webStage: '#dceeff',
     phoneFrame: '#06173a',
+    material: 'rgba(255,255,255,0.74)',
+    materialHeavy: 'rgba(255,255,255,0.92)',
+    segmentTrack: 'rgba(15,119,216,0.12)',
+    segmentActive: '#ffffff',
+    scrim: 'rgba(6,23,58,0.4)',
     appGradient: ['rgba(0,63,139,0.2)', 'rgba(21,169,255,0.16)', '#eaf6ff'],
     heroGradient: ['rgba(15,119,216,0.18)', 'rgba(53,201,255,0.16)', 'rgba(255,255,255,0.95)'],
     bubbleGradient: ['rgba(15,119,216,0.18)', 'rgba(53,201,255,0.2)'],
@@ -1011,6 +1031,7 @@ export default function App() {
       periodRecords: type === 'period' ? current.periodRecords.filter((item) => item.id !== id) : current.periodRecords,
       symptomRecords: type === 'symptom' ? current.symptomRecords.filter((item) => item.id !== id) : current.symptomRecords,
     }));
+    void hapticWarning();
     const label = type === 'sex' ? '亲密记录' : type === 'period' ? '经期记录' : '症状记录';
     showNotice(`已删除${label}`, { label: '撤销', run: () => restoreRecord(type, record) }, 5000);
   }
@@ -1324,22 +1345,23 @@ export default function App() {
                 <Text style={styles.subtitle}>{state.settings.privacyMode ? '隐私模式已开启' : currentCopy.subtitle}</Text>
               </View>
               <View style={styles.headerActions}>
-                <Pressable
+                <PressScale
                   style={styles.headerIconButton}
-                  onPress={() =>
-                    patchState((current) => ({
-                      ...current,
-                      settings: { ...current.settings, privacyMode: !current.settings.privacyMode },
-                    }))
-                  }
+                  pressableProps={{
+                    onPress: () =>
+                      patchState((current) => ({
+                        ...current,
+                        settings: { ...current.settings, privacyMode: !current.settings.privacyMode },
+                      })),
+                  }}
                 >
                   {state.settings.privacyMode ? <EyeOff color={colors.primary} size={20} /> : <Eye color={colors.primary} size={20} />}
-                </Pressable>
-                <Pressable style={styles.avatarButton} onPress={openAbout}>
+                </PressScale>
+                <PressScale style={styles.avatarButton} pressableProps={{ onPress: openAbout }}>
                   <LinearGradient colors={colors.avatarGradient} style={styles.avatar}>
                     <Info color="#fff" size={21} strokeWidth={2.7} />
                   </LinearGradient>
-                </Pressable>
+                </PressScale>
               </View>
             </View>
 
@@ -1409,11 +1431,11 @@ export default function App() {
             )}
 
             {screen !== 'insights' && (
-              <Pressable style={styles.fab} onPress={() => setFabOpen((current) => !current)}>
+              <PressScale style={styles.fab} pressableProps={{ onPress: () => setFabOpen((current) => !current) }}>
                 <LinearGradient colors={fabOpen ? [colors.secondary, colors.primaryLight] : colors.avatarGradient} style={styles.fabGradient}>
                   {fabOpen ? <X color="#fff" size={27} strokeWidth={2.7} /> : <Plus color="#fff" size={29} strokeWidth={2.7} />}
                 </LinearGradient>
-              </Pressable>
+              </PressScale>
             )}
 
             {notice && (
@@ -1437,12 +1459,12 @@ export default function App() {
               onOpenUrl={openExternalUrl}
             />
 
-            <View style={styles.bottomNav}>
+            <Material intensity={28} tint="light" solidFallback={colors.card} style={styles.bottomNav}>
               <NavItem active={screen === 'home'} label="首页" Icon={Home} onPress={() => setScreen('home')} />
               <NavItem active={screen === 'calendar'} label="日历" Icon={CalendarDays} onPress={() => setScreen('calendar')} />
               <NavItem active={screen === 'insights'} label="统计" Icon={BarChart3} onPress={() => setScreen('insights')} />
               <NavItem active={screen === 'settings'} label="设置" Icon={Settings} onPress={() => setScreen('settings')} />
-            </View>
+            </Material>
 
             <EntrySheet
               type={sheetType}
@@ -1460,6 +1482,7 @@ export default function App() {
                     ? current.sexRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.sexRecords, record],
                 }));
+                void hapticSuccess();
                 showNotice(editingSexRecord ? '已保存修改' : '已保存');
               }}
               onSavePeriod={(record) => {
@@ -1469,6 +1492,7 @@ export default function App() {
                     ? current.periodRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.periodRecords, record],
                 }));
+                void hapticSuccess();
                 showNotice(editingPeriodRecord ? '已保存修改' : '已保存');
               }}
               onSavePeriodDay={(record) => {
@@ -1481,6 +1505,7 @@ export default function App() {
                       : [...withoutSameDate, record],
                   };
                 });
+                void hapticSuccess();
                 showNotice(editingPeriodDayRecord ? '已保存当天月经状态' : '已记录当天月经状态');
               }}
               onSaveSymptom={(record) => {
@@ -1490,6 +1515,7 @@ export default function App() {
                     ? current.symptomRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.symptomRecords, record],
                 }));
+                void hapticSuccess();
                 showNotice(editingSymptomRecord ? '已保存修改' : '已保存');
               }}
             />
@@ -1580,23 +1606,25 @@ function HomeScreen({
       ) : (
         <>
           {timeline.length > 0 && (
-            <View style={styles.filterRail}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeRangeTrack} style={styles.homeRangeScroll}>
               {timelineRangeOptions.map((option) => {
                 const active = timelineRange === option.value;
                 return (
-                  <Pressable
+                  <PressScale
                     key={option.value}
-                    style={[styles.sheetChip, active && styles.sheetChipActive]}
-                    onPress={() => {
-                      setTimelineRange(option.value);
-                      setShowAll(false);
+                    style={[styles.homeRangeItem, active && styles.homeRangeItemActive]}
+                    pressableProps={{
+                      onPress: () => {
+                        setTimelineRange(option.value);
+                        setShowAll(false);
+                      },
                     }}
                   >
-                    <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
-                  </Pressable>
+                    <Text style={[styles.homeRangeText, active && styles.homeRangeTextActive]}>{option.label}</Text>
+                  </PressScale>
                 );
               })}
-            </View>
+            </ScrollView>
           )}
 
           {timelineRange === 'custom' && (
@@ -1611,16 +1639,18 @@ function HomeScreen({
               {filterOptions.map((option) => {
                 const active = filter === option.value;
                 return (
-                  <Pressable
+                  <PressScale
                     key={option.value}
                     style={[styles.sheetChip, active && styles.sheetChipActive]}
-                    onPress={() => {
-                      setFilter(option.value);
-                      setShowAll(false);
+                    pressableProps={{
+                      onPress: () => {
+                        setFilter(option.value);
+                        setShowAll(false);
+                      },
                     }}
                   >
                     <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{`${option.label} ${option.count}`}</Text>
-                  </Pressable>
+                  </PressScale>
                 );
               })}
             </View>
@@ -1629,11 +1659,12 @@ function HomeScreen({
           {rangedTimeline.length ? (
             filtered.length ? (
               <>
-                {visible.map((item) => (
+                {visible.map((item, index) => (
                   <RecordCard
                     key={`${item.type}-${item.id}`}
                     item={item}
                     privacy={false}
+                    index={index}
                     sexRecord={item.type === 'sex' ? state.sexRecords.find((record) => record.id === item.id) : undefined}
                     periodRecord={item.type === 'period' ? state.periodRecords.find((record) => record.id === item.id) : undefined}
                     symptomRecord={item.type === 'symptom' ? state.symptomRecords.find((record) => record.id === item.id) : undefined}
@@ -1644,9 +1675,9 @@ function HomeScreen({
                   />
                 ))}
                 {filtered.length > visible.length && (
-                  <Pressable style={styles.viewAllButton} onPress={() => setShowAll(true)}>
+                  <PressScale style={styles.viewAllButton} pressableProps={{ onPress: () => setShowAll(true) }}>
                     <Text style={styles.viewAllText}>查看全部 {filtered.length} 条</Text>
-                  </Pressable>
+                  </PressScale>
                 )}
               </>
             ) : (
@@ -1769,9 +1800,17 @@ function CalendarScreen({
         ? '修改经期结束'
         : '标记经期结束';
 
+  const panStartX = useRef(0);
+
+  function shiftMonth(delta: number) {
+    onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + delta, 1));
+    void hapticSelection();
+  }
+
   function markPeriodStart() {
     if (canCancelPeriodStart) {
       cancelSelectedPeriod();
+      void hapticWarning();
       return;
     }
     if (!canMarkPeriodStart) return;
@@ -1789,6 +1828,7 @@ function CalendarScreen({
         },
       ],
     }));
+    void hapticMedium();
   }
 
   function markPeriodEnd() {
@@ -1810,6 +1850,7 @@ function CalendarScreen({
       }
       return { ...current, periodRecords: records };
     });
+    void hapticMedium();
   }
 
   function cancelSelectedPeriod() {
@@ -1841,29 +1882,43 @@ function CalendarScreen({
 
   return (
     <View>
-      <View style={styles.calendarShell}>
+      <View
+        style={styles.calendarShell}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={(event) => Math.abs(event.nativeEvent.pageX - panStartX.current) > 12}
+        onResponderGrant={(event) => {
+          panStartX.current = event.nativeEvent.pageX;
+        }}
+        onResponderRelease={(event) => {
+          const dx = event.nativeEvent.pageX - panStartX.current;
+          if (dx > 48) shiftMonth(-1);
+          else if (dx < -48) shiftMonth(1);
+        }}
+      >
         <View style={styles.calendarHeader}>
-        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}>
+        <PressScale style={styles.roundButton} pressableProps={{ onPress: () => shiftMonth(-1) }}>
           <ChevronLeft color={colors.primary} size={21} strokeWidth={2.7} />
-        </Pressable>
-        <Pressable style={styles.calendarTitleBox} onPress={() => setMonthPickerOpen(true)}>
+        </PressScale>
+        <PressScale style={styles.calendarTitleBox} pressableProps={{ onPress: () => setMonthPickerOpen(true) }}>
           <Text style={styles.calendarTitle}>{monthTitle}</Text>
           <Text style={styles.calendarWeekLine}>{prediction}</Text>
           <Text style={styles.calendarDateLine}>{longDate(selectedDate)}</Text>
-        </Pressable>
-        <Pressable style={styles.roundButton} onPress={() => onMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}>
+        </PressScale>
+        <PressScale style={styles.roundButton} pressableProps={{ onPress: () => shiftMonth(1) }}>
           <ChevronRight color={colors.primary} size={21} strokeWidth={2.7} />
-        </Pressable>
+        </PressScale>
         </View>
 
         <View style={styles.calendarTodayRow}>
-          <Pressable style={styles.calendarTodayButton} onPress={() => {
-            const now = new Date();
-            onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
-            onSelectDate(now);
+          <PressScale style={styles.calendarTodayButton} pressableProps={{
+            onPress: () => {
+              const now = new Date();
+              onMonthChange(new Date(now.getFullYear(), now.getMonth(), 1));
+              onSelectDate(now);
+            },
           }}>
             <Text style={styles.calendarTodayText}>回到今天</Text>
-          </Pressable>
+          </PressScale>
         </View>
 
         <View style={styles.weekdayGrid}>
@@ -1884,7 +1939,10 @@ function CalendarScreen({
                   state={state}
                   cycleInfo={cycleInfo}
                   selected={toDateKey(date) === toDateKey(selectedDate)}
-                  onPress={() => onSelectDate(date)}
+                  onPress={() => {
+                    void hapticSelection();
+                    onSelectDate(date);
+                  }}
                 />
               ))}
             </View>
@@ -2143,10 +2201,10 @@ function InsightsScreen({
                 return (
                   <View style={styles.columnSlot} key={`${item.label}-${index}`}>
                     <View style={[styles.columnTrack, range === 'week' && styles.columnTrackWeek, range === 'month' && styles.columnTrackMonth]}>
-                      <View style={[styles.columnStack, { height: barHeight }]}>
+                      <AnimatedBar height={barHeight} style={styles.columnStack}>
                         {item.soloCount > 0 && <View style={[styles.columnPart, styles.columnPartSolo, { flex: item.soloCount }]} />}
                         {item.partneredCount > 0 && <View style={[styles.columnPart, styles.columnPartPartnered, { flex: item.partneredCount }]} />}
-                      </View>
+                      </AnimatedBar>
                     </View>
                     <Text style={styles.columnLabel}>{item.label}</Text>
                   </View>
@@ -2816,31 +2874,80 @@ function EntrySheet({
   const editingRecord = Boolean(editingSexRecord || editingPeriodRecord || editingPeriodDayRecord || editingSymptomRecord);
   const symptomOptions = type === 'period' || type === 'periodDay' ? ['腹痛', '腰痛', '头痛', '疲劳', '乳房胀痛'] : ['分泌物变化', '腹胀', '疲劳', '失眠', '情绪波动'];
 
-  return (
-    <Modal visible={Boolean(type)} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.sheetBackdrop} onPress={onClose} />
-      <View style={styles.sheetPanel}>
-        <View style={styles.sheetHandle} />
-        <View style={styles.sheetHeader}>
-          <View>
-            <Text style={styles.dateLabel}>{sheetShort}</Text>
-            <Text style={styles.sheetTitle}>{editingRecord ? `编辑${typeMeta.label}` : `${typeMeta.label}记录`}</Text>
-          </View>
-          <Pressable style={styles.sheetClose} onPress={onClose}>
-            <X color={colors.sub} size={21} strokeWidth={2.6} />
-          </Pressable>
-        </View>
+  const showCoreSexFields = Boolean(sexMode);
+  const showPartneredDetails = sexMode === 'partneredSex';
+  const showSoloDetails = sexMode === 'soloSex';
 
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <View style={styles.formGrid}>
-            {prefillUsed && <Text style={styles.prefillHint}>已自动填入上次的选择，可修改</Text>}
-            <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
-            {sexMode && <TimePickerField label="时间" value={time} onChange={setTime} />}
-            {sexMode && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
-            {sexMode && <TextField label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
-            {sexMode === 'partneredSex' && <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />}
-            {sexMode && <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />}
-            {sexMode === 'partneredSex' && (
+  return (
+    <AppleSheet
+      visible={Boolean(type)}
+      onClose={onClose}
+      maxHeight={Platform.OS === 'web' ? 680 : undefined}
+      backgroundColor={colors.materialHeavy}
+      scrimColor={colors.scrim}
+      header={
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.dateLabel}>{sheetShort}</Text>
+            <Text style={styles.sheetTitle}>{editingRecord ? `编辑${typeMeta.label}` : typeMeta.label}</Text>
+          </View>
+          <PressScale style={styles.sheetClose} pressableProps={{ onPress: onClose, hitSlop: 8 }}>
+            <X color={colors.sub} size={21} strokeWidth={2.6} />
+          </PressScale>
+        </View>
+      }
+      style={styles.sheetPanel}
+    >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScrollContent} bounces>
+        <View style={styles.formGrid}>
+          {prefillUsed && <Text style={styles.prefillHint}>已自动填入上次的选择，可修改</Text>}
+          <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
+          {showCoreSexFields && <TimePickerField label="时间" value={time} onChange={setTime} />}
+          {showCoreSexFields && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
+          {showCoreSexFields && <TextField label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
+
+          {showPartneredDetails && (
+            <OptionSection label="保护措施">
+              <IconChoiceGrid
+                options={[
+                  { label: '无保护措施', icon: 'noProtect' },
+                  { label: '安全套', icon: 'condom' },
+                  { label: '药物', icon: 'pill' },
+                ]}
+                selected={protectionMethods}
+                onToggle={toggleProtection}
+              />
+            </OptionSection>
+          )}
+          {showSoloDetails && (
+            <OptionSection label="道具">
+              <IconChoiceGrid
+                options={[
+                  { label: 'Hand Job', icon: 'hand' },
+                  { label: '飞机杯', icon: 'cup' },
+                  { label: '女用玩具', icon: 'wand' },
+                ]}
+                selected={soloTools}
+                onToggle={toggleSoloTool}
+              />
+            </OptionSection>
+          )}
+          {showCoreSexFields && (
+            <OptionSection label="评分">
+              <RatingPicker value={Number(satisfaction) || 0} onChange={(next) => setSatisfaction(String(next))} />
+            </OptionSection>
+          )}
+          {showCoreSexFields && (
+            <OptionSection label="心情">
+              <MoodPicker value={mood} onChange={setMood} />
+            </OptionSection>
+          )}
+
+          {showPartneredDetails && (
+            <View style={styles.detailsSection}>
+              <Text style={styles.detailsSectionTitle}>更多细节</Text>
+              <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />
+              <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
               <OptionSection label="高潮信息">
                 <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
                 <SwitchOption label="伴侣高潮" hint="滑动开关来选择伴侣是否高潮" value={partnerArousal} onChange={setPartnerArousal} Icon={HeartHandshake} />
@@ -2850,26 +2957,9 @@ function EntrySheet({
                 </OptionSection>
                 <SwitchOption label="道具" hint="滑动开关来选择是否使用道具" value={toyUsed} onChange={setToyUsed} Icon={Sparkles} />
               </OptionSection>
-            )}
-            {sexMode === 'partneredSex' && (
-              <OptionSection label="保护措施">
-                <IconChoiceGrid
-                  options={[
-                    { label: '无保护措施', icon: 'noProtect' },
-                    { label: '安全套', icon: 'condom' },
-                    { label: '药物', icon: 'pill' },
-                  ]}
-                  selected={protectionMethods}
-                  onToggle={toggleProtection}
-                />
-              </OptionSection>
-            )}
-            {sexMode === 'partneredSex' && (
               <OptionSection label="姿势">
                 <MiniChoiceRail options={['侧躺', '后入', '骑乘', '跪姿', '拥抱', '俯卧']} selected={positions} onToggle={togglePosition} />
               </OptionSection>
-            )}
-            {sexMode === 'partneredSex' && (
               <OptionSection label="谁发起的">
                 <SegmentPicker
                   value={initiator}
@@ -2880,72 +2970,66 @@ function EntrySheet({
                   onChange={(value) => setInitiator(value as 'self' | 'partner')}
                 />
               </OptionSection>
-            )}
-            {sexMode === 'partneredSex' && <SwitchOption label="情趣内衣" hint="滑动开关来选择是否穿戴了情趣内衣" value={lingerie} onChange={setLingerie} Icon={Sparkles} />}
-            {sexMode === 'soloSex' && (
-              <OptionSection label="道具">
-                <IconChoiceGrid
-                  options={[
-                    { label: 'Hand Job', icon: 'hand' },
-                    { label: '飞机杯', icon: 'cup' },
-                    { label: '女用玩具', icon: 'wand' },
-                  ]}
-                  selected={soloTools}
-                  onToggle={toggleSoloTool}
-                />
-              </OptionSection>
-            )}
-            {sexMode === 'soloSex' && <SwitchOption label="观看成人电影" hint="滑动开关来选择是否观看" value={watchedAdultMovie} onChange={setWatchedAdultMovie} Icon={Eye} />}
-            {sexMode === 'soloSex' && <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />}
-            {sexMode && (
-              <OptionSection label="评分">
-                <RatingPicker value={Number(satisfaction) || 0} onChange={(next) => setSatisfaction(String(next))} />
-              </OptionSection>
-            )}
-            {sexMode && (
-              <OptionSection label="心情">
-                <MoodPicker value={mood} onChange={setMood} />
-              </OptionSection>
-            )}
-            {sexMode && <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />}
-            {type === 'period' && <DatePickerField label="结束日期" value={periodEnd || date} onChange={setPeriodEnd} />}
-            {(type === 'period' || type === 'periodDay') && (
-              <View style={styles.sheetChipGroup}>
-                {[
-                  ['light', '少'],
-                  ['medium', '中'],
-                  ['heavy', '多'],
-                ].map(([value, label]) => (
-                  <Pressable key={value} style={[styles.sheetChip, flow === value && styles.sheetChipActive]} onPress={() => setFlow(value)}>
-                    <Text style={[styles.sheetChipText, flow === value && styles.sheetChipTextActive]}>流量{label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            {!sexMode && (
-              <OptionSection label={type === 'period' || type === 'periodDay' ? '痛经程度' : '强度'}>
-                <ScalePicker value={Number(pain) || 0} onChange={(next) => setPain(String(next))} />
-              </OptionSection>
-            )}
-            {!sexMode && (
-              <View style={styles.sheetChipGroup}>
-                {symptomOptions.map((item) => (
-                  <Pressable key={item} style={[styles.sheetChip, symptoms.includes(item) && styles.sheetChipActive]} onPress={() => toggleSymptom(item)}>
-                    <Text style={[styles.sheetChipText, symptoms.includes(item) && styles.sheetChipTextActive]}>{item}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-            <TextField label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
-            <Pressable style={styles.primaryButton} onPress={save}>
-              <LinearGradient colors={colors.avatarGradient} style={styles.primaryButtonGradient}>
-                <Text style={styles.primaryButtonText}>{editingRecord ? '保存修改' : '保存记录'}</Text>
-              </LinearGradient>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </View>
-    </Modal>
+              <SwitchOption label="情趣内衣" hint="滑动开关来选择是否穿戴了情趣内衣" value={lingerie} onChange={setLingerie} Icon={Sparkles} />
+              <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
+            </View>
+          )}
+
+          {showSoloDetails && (
+            <View style={styles.detailsSection}>
+              <Text style={styles.detailsSectionTitle}>更多细节</Text>
+              <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
+              <SwitchOption label="观看成人电影" hint="滑动开关来选择是否观看" value={watchedAdultMovie} onChange={setWatchedAdultMovie} Icon={Eye} />
+              <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
+              <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
+            </View>
+          )}
+
+          {type === 'period' && <DatePickerField label="结束日期" value={periodEnd || date} onChange={setPeriodEnd} />}
+          {(type === 'period' || type === 'periodDay') && (
+            <View style={styles.sheetChipGroup}>
+              {[
+                ['light', '少'],
+                ['medium', '中'],
+                ['heavy', '多'],
+              ].map(([value, label]) => (
+                <PressScale
+                  key={value}
+                  style={[styles.sheetChip, flow === value && styles.sheetChipActive]}
+                  pressableProps={{ onPress: () => setFlow(value) }}
+                >
+                  <Text style={[styles.sheetChipText, flow === value && styles.sheetChipTextActive]}>流量{label}</Text>
+                </PressScale>
+              ))}
+            </View>
+          )}
+          {!sexMode && (
+            <OptionSection label={type === 'period' || type === 'periodDay' ? '痛经程度' : '强度'}>
+              <ScalePicker value={Number(pain) || 0} onChange={(next) => setPain(String(next))} />
+            </OptionSection>
+          )}
+          {!sexMode && (
+            <View style={styles.sheetChipGroup}>
+              {symptomOptions.map((item) => (
+                <PressScale
+                  key={item}
+                  style={[styles.sheetChip, symptoms.includes(item) && styles.sheetChipActive]}
+                  pressableProps={{ onPress: () => toggleSymptom(item) }}
+                >
+                  <Text style={[styles.sheetChipText, symptoms.includes(item) && styles.sheetChipTextActive]}>{item}</Text>
+                </PressScale>
+              ))}
+            </View>
+          )}
+          <TextField label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
+          <PressScale style={styles.primaryButton} pressableProps={{ onPress: save }}>
+            <LinearGradient colors={colors.avatarGradient} style={styles.primaryButtonGradient}>
+              <Text style={styles.primaryButtonText}>{editingRecord ? '保存修改' : '保存记录'}</Text>
+            </LinearGradient>
+          </PressScale>
+        </View>
+      </ScrollView>
+    </AppleSheet>
   );
 }
 
@@ -3012,6 +3096,7 @@ function RecordCard({
   onEditSex,
   onEditPeriod,
   onEditSymptom,
+  index = 0,
 }: {
   item: TimelineItem;
   privacy: boolean;
@@ -3022,6 +3107,7 @@ function RecordCard({
   onEditSex: (record: SexRecord) => void;
   onEditPeriod: (record: PeriodRecord) => void;
   onEditSymptom: (record: SymptomRecord) => void;
+  index?: number;
 }) {
   const meta = recordMeta[item.type];
   const sexKind = item.type === 'sex' ? getSexKindMeta(sexRecord) : null;
@@ -3037,36 +3123,38 @@ function RecordCard({
   }
 
   return (
-    <Pressable style={styles.recordCard} onPress={() => canEdit && edit()}>
-      <LinearGradient colors={iconColors} style={styles.recordIcon}>
-        <Icon color="#fff" size={22} strokeWidth={2.6} />
-      </LinearGradient>
-      <View style={styles.recordCopy}>
-        <Text style={styles.recordTitle}>{summary.title}</Text>
-        <Text style={styles.recordMeta}>{summary.meta}</Text>
-        {!!summary.detail && <Text style={styles.recordDetailPill}>{summary.detail}</Text>}
-      </View>
-      {canEdit && (
-        <Pressable style={styles.editButton} onPress={edit}>
-          <Pencil color={colors.primary} size={16} strokeWidth={2.5} />
-        </Pressable>
-      )}
-      <Pressable style={styles.deleteButton} onPress={() => onDelete(item.type, item.id)}>
-        <Trash2 color={colors.danger} size={16} strokeWidth={2.5} />
-      </Pressable>
-    </Pressable>
+    <FadeSlideIn delay={Math.min(index, 8) * 35} distance={8}>
+      <PressScale style={styles.recordCard} pressableProps={{ onPress: () => canEdit && edit() }}>
+        <LinearGradient colors={iconColors} style={styles.recordIcon}>
+          <Icon color="#fff" size={22} strokeWidth={2.6} />
+        </LinearGradient>
+        <View style={styles.recordCopy}>
+          <Text style={styles.recordTitle}>{summary.title}</Text>
+          <Text style={styles.recordMeta}>{summary.meta}</Text>
+          {!!summary.detail && <Text style={styles.recordDetailPill}>{summary.detail}</Text>}
+        </View>
+        {canEdit && (
+          <PressScale style={styles.editButton} pressableProps={{ onPress: edit, hitSlop: 6 }}>
+            <Pencil color={colors.primary} size={16} strokeWidth={2.5} />
+          </PressScale>
+        )}
+        <PressScale style={styles.deleteButton} pressableProps={{ onPress: () => onDelete(item.type, item.id), hitSlop: 6 }}>
+          <Trash2 color={colors.danger} size={16} strokeWidth={2.5} />
+        </PressScale>
+      </PressScale>
+    </FadeSlideIn>
   );
 }
 
 function NavItem({ active, label, Icon, onPress }: { active: boolean; label: string; Icon: LucideIcon; onPress: () => void }) {
   return (
-    <Pressable style={styles.navItem} onPress={onPress}>
+    <PressScale style={styles.navItem} pressableProps={{ onPress }}>
       <View style={[styles.navIconWrap, active && styles.navIconWrapActive]}>
         <Icon color={active ? colors.primary : colors.sub} size={19} strokeWidth={active ? 2.8 : 2.3} />
       </View>
       <Text style={[styles.navLabel, active && styles.navActive]}>{label}</Text>
       <View style={[styles.navDot, active && styles.navDotActive]} />
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -3089,7 +3177,7 @@ function FabMenuItem({ primary, type, desc, privacy, onPress }: { primary?: bool
   const Icon = meta.Icon;
   const label = privacy ? getPrivateSheetLabel(type) : isSexSheet(type) ? meta.label : `${meta.label}记录`;
   return (
-    <Pressable style={[styles.fabMenuItem, primary && styles.fabMenuItemPrimary]} onPress={onPress}>
+    <PressScale style={[styles.fabMenuItem, primary && styles.fabMenuItemPrimary]} pressableProps={{ onPress }}>
       <LinearGradient colors={primary ? meta.colors : [colors.soft, 'rgba(255,255,255,0.68)']} style={styles.fabMenuIcon}>
         <Icon color={primary ? '#fff' : colors.primary} size={18} strokeWidth={2.6} />
       </LinearGradient>
@@ -3097,7 +3185,7 @@ function FabMenuItem({ primary, type, desc, privacy, onPress }: { primary?: bool
         <Text style={styles.fabMenuLabel}>{label}</Text>
         <Text style={styles.fabMenuDesc}>{desc}</Text>
       </View>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -3145,24 +3233,26 @@ function CalendarDay({
   const outside = date.getMonth() !== visibleMonth.getMonth();
   const eventMarker = markers[0];
   return (
-    <Pressable
-      style={[
-        styles.calendarDay,
-        tone === 'period' && styles.calendarDayPeriod,
-        tone === 'predictedPeriod' && styles.calendarDayPredictedPeriod,
-        tone === 'fertile' && styles.calendarDayFertile,
-        outside && styles.calendarDayOutside,
-        isToday && styles.calendarDayToday,
-        selected && styles.calendarDaySelected,
-      ]}
-      onPress={onPress}
-    >
-      <Text style={[styles.calendarDayNumber, tone === 'period' && styles.calendarDayNumberOnTone]}>{date.getDate()}</Text>
-      <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{privacyMode ? '' : lunar}</Text>
-      <View style={styles.calendarDayMarkerSlot}>
-        {eventMarker && <View style={[styles.calendarDayMarkerDot, markerStyle(eventMarker)]} />}
-      </View>
-    </Pressable>
+    <ScaleOnSelect selected={selected} style={styles.calendarDayScaleWrap}>
+      <PressScale
+        style={[
+          styles.calendarDay,
+          tone === 'period' && styles.calendarDayPeriod,
+          tone === 'predictedPeriod' && styles.calendarDayPredictedPeriod,
+          tone === 'fertile' && styles.calendarDayFertile,
+          outside && styles.calendarDayOutside,
+          isToday && styles.calendarDayToday,
+          selected && styles.calendarDaySelected,
+        ]}
+        pressableProps={{ onPress }}
+      >
+        <Text style={[styles.calendarDayNumber, tone === 'period' && styles.calendarDayNumberOnTone]}>{date.getDate()}</Text>
+        <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{privacyMode ? '' : lunar}</Text>
+        <View style={styles.calendarDayMarkerSlot}>
+          {eventMarker && <View style={[styles.calendarDayMarkerDot, markerStyle(eventMarker)]} />}
+        </View>
+      </PressScale>
+    </ScaleOnSelect>
   );
 }
 
@@ -3177,9 +3267,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function RangeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
-    <Pressable style={[styles.segmentButton, active && styles.segmentButtonActive]} onPress={onPress}>
+    <PressScale style={[styles.segmentButton, active && styles.segmentButtonActive]} pressableProps={{ onPress }}>
       <Text style={[styles.segmentButtonText, active && styles.segmentButtonTextActive]}>{label}</Text>
-    </Pressable>
+    </PressScale>
   );
 }
 
@@ -4823,7 +4913,7 @@ function createStyles(theme: ThemePalette) {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 18,
-    backgroundColor: '#eef1ff',
+    backgroundColor: colors.webStage,
   },
   webPhoneFrame: {
     width: 430,
@@ -4832,7 +4922,7 @@ function createStyles(theme: ThemePalette) {
     maxHeight: '100%',
     borderRadius: 40,
     padding: 10,
-    backgroundColor: '#141826',
+    backgroundColor: colors.phoneFrame,
     shadowColor: '#191e36',
     shadowOffset: { width: 0, height: 30 },
     shadowOpacity: 0.28,
@@ -4860,19 +4950,22 @@ function createStyles(theme: ThemePalette) {
     marginBottom: 6,
     color: colors.primary,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   title: {
     color: colors.text,
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '700',
     lineHeight: 32,
+    letterSpacing: -0.4,
   },
   subtitle: {
     marginTop: 4,
     color: colors.sub,
     fontSize: 14,
     lineHeight: 19,
+    fontWeight: '500',
   },
   headerActions: {
     flexDirection: 'row',
@@ -4948,13 +5041,14 @@ function createStyles(theme: ThemePalette) {
     color: colors.primary,
     backgroundColor: colors.soft,
     fontSize: 12,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   heroTitle: {
     color: colors.text,
     fontSize: 26,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 31,
+    letterSpacing: -0.4,
   },
   heroHint: {
     color: colors.sub,
@@ -4972,12 +5066,13 @@ function createStyles(theme: ThemePalette) {
   cycleDay: {
     color: colors.text,
     fontSize: 32,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.6,
   },
   cycleDayLabel: {
     color: colors.sub,
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   quickGrid: {
     flexDirection: 'row',
@@ -4997,13 +5092,14 @@ function createStyles(theme: ThemePalette) {
   metricLabel: {
     color: colors.sub,
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   metricValue: {
     marginTop: 5,
     color: colors.text,
     fontSize: 24,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   metricHint: {
     marginTop: 2,
@@ -5020,7 +5116,8 @@ function createStyles(theme: ThemePalette) {
   sectionTitle: {
     color: colors.text,
     fontSize: 18,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   textAction: {
     minHeight: 34,
@@ -5062,7 +5159,7 @@ function createStyles(theme: ThemePalette) {
   privacyCollapsedTitle: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   privacyCollapsedText: {
     color: colors.sub,
@@ -5095,7 +5192,8 @@ function createStyles(theme: ThemePalette) {
   recordTitle: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.15,
   },
   recordMeta: {
     color: colors.sub,
@@ -5527,9 +5625,14 @@ function createStyles(theme: ThemePalette) {
     flexDirection: 'row',
     gap: 4,
   },
-  calendarDay: {
+  calendarDayScaleWrap: {
     flex: 1,
     aspectRatio: 1,
+  },
+  calendarDay: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
@@ -5603,7 +5706,8 @@ function createStyles(theme: ThemePalette) {
   panelTitle: {
     color: colors.text,
     fontSize: 16,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.2,
     marginBottom: 14,
   },
   sexChartPanel: {
@@ -5617,7 +5721,7 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 22,
     padding: 5,
     marginBottom: 14,
-    backgroundColor: '#ebe9ff',
+    backgroundColor: colors.segmentTrack,
   },
   segmentButton: {
     flex: 1,
@@ -5627,12 +5731,12 @@ function createStyles(theme: ThemePalette) {
     justifyContent: 'center',
   },
   segmentButtonActive: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.segmentActive,
   },
   segmentButtonText: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   segmentButtonTextActive: {
     color: colors.primary,
@@ -5645,13 +5749,14 @@ function createStyles(theme: ThemePalette) {
   bigMetric: {
     color: colors.text,
     fontSize: 46,
-    fontWeight: '900',
+    fontWeight: '700',
     lineHeight: 50,
+    letterSpacing: -0.8,
   },
   bigMetricUnit: {
     color: colors.sub,
     fontSize: 18,
-    fontWeight: '900',
+    fontWeight: '700',
     marginLeft: 5,
     marginBottom: 6,
   },
@@ -5739,6 +5844,7 @@ function createStyles(theme: ThemePalette) {
     width: 6,
   },
   columnStack: {
+    width: '100%',
     minHeight: 0,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
@@ -5746,6 +5852,7 @@ function createStyles(theme: ThemePalette) {
     borderBottomRightRadius: 2,
     overflow: 'hidden',
     backgroundColor: 'transparent',
+    justifyContent: 'flex-end',
   },
   columnPart: {
     minHeight: 0,
@@ -5903,7 +6010,8 @@ function createStyles(theme: ThemePalette) {
     marginTop: 6,
     color: colors.text,
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   tagCloud: {
     flexDirection: 'row',
@@ -5934,7 +6042,8 @@ function createStyles(theme: ThemePalette) {
   emptyTitle: {
     color: colors.text,
     fontSize: 17,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.2,
   },
   emptyHint: {
     color: colors.sub,
@@ -6264,7 +6373,7 @@ function createStyles(theme: ThemePalette) {
   settingTitle: {
     color: colors.text,
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   settingHint: {
     marginTop: 4,
@@ -6898,6 +7007,37 @@ function createStyles(theme: ThemePalette) {
     gap: 8,
     marginBottom: 12,
   },
+  homeRangeScroll: {
+    marginBottom: 12,
+  },
+  homeRangeTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+    borderRadius: 18,
+    backgroundColor: colors.segmentTrack,
+  },
+  homeRangeItem: {
+    minHeight: 36,
+    minWidth: 52,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  homeRangeItemActive: {
+    backgroundColor: colors.segmentActive,
+  },
+  homeRangeText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  homeRangeTextActive: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
   viewAllButton: {
     marginTop: 6,
     height: 46,
@@ -7032,13 +7172,14 @@ function createStyles(theme: ThemePalette) {
     zIndex: 10,
     height: 70,
     borderRadius: 27,
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingHorizontal: 8,
-    backgroundColor: colors.card,
+    backgroundColor: colors.material,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: 'rgba(255,255,255,0.48)',
     ...cardShadow,
   },
   navItem: {
@@ -7062,7 +7203,7 @@ function createStyles(theme: ThemePalette) {
   navLabel: {
     color: colors.sub,
     fontSize: 11,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   navActive: {
     color: colors.primary,
@@ -7133,30 +7274,26 @@ function createStyles(theme: ThemePalette) {
   fabMenuLabel: {
     color: colors.text,
     fontSize: 14,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   fabMenuDesc: {
     marginTop: 2,
     color: colors.sub,
     fontSize: 12,
     lineHeight: 16,
+    fontWeight: '500',
   },
   sheetBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(45,52,54,0.38)',
   },
   sheetPanel: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '82%',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-    backgroundColor: '#fff',
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    backgroundColor: 'transparent',
+  },
+  sheetScrollContent: {
+    paddingBottom: 12,
   },
   sheetHandle: {
     width: 42,
@@ -7170,12 +7307,28 @@ function createStyles(theme: ThemePalette) {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    marginBottom: 8,
   },
   sheetTitle: {
     color: colors.text,
     fontSize: 22,
-    fontWeight: '900',
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  detailsSection: {
+    gap: 10,
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: colors.soft,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  detailsSectionTitle: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   sheetClose: {
     width: 40,
@@ -7531,7 +7684,7 @@ function createStyles(theme: ThemePalette) {
   sheetChipText: {
     color: colors.primary,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '600',
   },
   sheetChipTextActive: {
     color: '#fff',
