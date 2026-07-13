@@ -4,8 +4,8 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 
 ## 当前版本
 
-- 应用版本：`1.0.11`
-- Android versionCode：`12`
+- 应用版本：`1.0.12`
+- Android versionCode：`13`
 - Android 包名：`com.anonymous.lunalog`
 - GitHub 仓库：`https://github.com/cnxin/luna-log`
 - Gitee 镜像：`https://gitee.com/ysjugg/luna-log`
@@ -22,6 +22,14 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 - 视觉风格：支持原版、薄荷、蓝色三套主题。
 - 数据管理：支持 JSON 数据导入/导出，本地备份和恢复。
 - 更新检查：关于页可检查更新、查看来源诊断，并跳转到官方发布页完成下载和安装。
+
+## 1.0.12 更新
+
+- 记录表单改为可中断拖拽 Sheet，支持速度继承、吸附与边缘回弹。
+- 底栏与关键控件加入按下反馈、材质层级，并收敛首页筛选与字重。
+- 日历支持左右滑换月；统计柱图与时间线加入 spring / 入场动效。
+- 补充保存、删除、吸附等有意义触感反馈，并支持减少动态效果降级。
+- Android `versionCode` 更新到 `13`，支持从 `1.0.11` 正常升级安装。
 
 ## 1.0.11 更新
 
@@ -69,21 +77,21 @@ Luna Log 是一个本地优先的移动端记录应用 Demo，用于记录亲密
 当前版本 Release：
 
 ```text
-https://github.com/cnxin/luna-log/releases/tag/v1.0.11
+https://github.com/cnxin/luna-log/releases/tag/v1.0.12
 ```
 
 Android APK：
 
 ```text
-https://github.com/cnxin/luna-log/releases/download/v1.0.11/luna-log-v1.0.11-release.apk
+https://github.com/cnxin/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk
 ```
 
 
 APK 校验：
 
 ```text
-SHA256: 92794f81cabbb67ae4fd6e95649394a1e496761cfee453d3355cf80be5ff6561
-Size: 76760885 bytes
+SHA256: bbaad33690d9b22b681fb344f112f0aacec530fa9c1e266090c94ec1e87241b0
+Size: 88499234 bytes
 ```
 
 ## 开发运行

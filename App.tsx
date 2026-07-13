@@ -249,7 +249,7 @@ type AppUpdateInfo = {
 };
 
 const today = new Date();
-const APP_VERSION = '1.0.11';
+const APP_VERSION = '1.0.12';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
@@ -262,6 +262,17 @@ const UPDATE_SOURCES: UpdateSource[] = [
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.12',
+    date: '2026-07-13',
+    title: 'Apple Design 风格交互升级',
+    highlights: [
+      '记录表单改为可中断拖拽 Sheet，支持速度继承、吸附与边缘回弹',
+      '底栏与关键控件加入按下反馈、材质层级，并收敛首页筛选与字重',
+      '日历支持左右滑换月，统计柱图与时间线加入 spring / 入场动效',
+      '补充保存、删除、吸附等有意义触感反馈，并支持减少动态效果降级',
+    ],
+  },
   {
     version: '1.0.11',
     date: '2026-07-11',

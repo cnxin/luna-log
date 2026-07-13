@@ -1,20 +1,20 @@
 {
-    "version":  "1.0.10",
-    "releaseDate":  "2026-07-09",
-    "publishedAt":  "2026-07-09T00:00:00Z",
-    "title":  "Luna Log 1.0.10：版本同步和日历隐私优化",
-    "highlights":  [
-                       "修复应用内版本号仍显示 1.0.8 的问题。",
-                       "同步 Android 原生 versionName / versionCode，确保安装后系统和应用内都显示 1.0.10。",
-                       "日历中的亲密记录入口改为隐私化文案，点击后再选择伴侣亲密或个人亲密。",
-                       "日历、统计和最近记录中的亲密记录文案统一为更含蓄的表达。"
-                   ],
-    "downloadUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
-    "apkUrl":  "https://github.com/cnxin/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
-    "mirrorApkUrl":  "https://gitee.com/ysjugg/luna-log/releases/download/v1.0.10/luna-log-v1.0.10-release.apk",
-    "releaseUrl":  "https://github.com/cnxin/luna-log/releases/tag/v1.0.10",
-    "apkName":  "luna-log-v1.0.10-release.apk",
-    "apkSize":  76380036,
-    "apkSha256":  "a8e0c0e41a95feb85373ceb9a063283bdd6ae49c5296d799b22cbbbeffced888",
-    "mandatory":  false
+  "version": "1.0.12",
+  "releaseDate": "2026-07-13",
+  "publishedAt": "2026-07-13T00:00:00Z",
+  "title": "Luna Log 1.0.12：Apple Design 风格交互升级",
+  "highlights": [
+    "记录表单改为可中断拖拽 Sheet，支持速度继承、吸附与边缘回弹。",
+    "底栏与关键控件加入按下反馈、材质层级，并收敛首页筛选与字重。",
+    "日历支持左右滑换月；统计柱图与时间线加入 spring / 入场动效。",
+    "补充保存、删除、吸附等有意义触感反馈，并支持减少动态效果降级。"
+  ],
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
+  "apkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
+  "mirrorApkUrl": "https://gitee.com/ysjugg/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.12",
+  "apkName": "luna-log-v1.0.12-release.apk",
+  "apkSize": 88499234,
+  "apkSha256": "bbaad33690d9b22b681fb344f112f0aacec530fa9c1e266090c94ec1e87241b0",
+  "mandatory": false
 }
