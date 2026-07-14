@@ -7,6 +7,7 @@ import { decryptAppState, encryptAppState } from '../domain/encryptedEnvelope';
 
 const legacyStorageKey = 'luna-log-app-v5';
 const encryptedStorageKey = 'luna-log-app-v6';
+const entryDraftStorageKey = 'luna-log-app-v6-entry-draft';
 const encryptionKeyName = 'luna-log-app-v6-data-key';
 const protectionSettingsKey = 'luna-log-app-v6-protection';
 const encryptionKeyOptions = {
@@ -133,6 +134,32 @@ export async function persistStoredAppData(serializedState: string) {
   const encrypted = encryptAppState(serializedState, key, nonce);
   await AsyncStorage.setItem(encryptedStorageKey, encrypted);
   await AsyncStorage.removeItem(legacyStorageKey);
+}
+
+export async function loadEntryDraft() {
+  const raw = await AsyncStorage.getItem(entryDraftStorageKey);
+  if (!raw) return null;
+  if (!isNativeSecureStoragePlatform()) return raw;
+  if (!(await secureStorageAvailable())) throw new Error('Secure storage is unavailable');
+  const key = await readExistingDataKey();
+  if (!key) return null;
+  return decryptAppState(raw, key);
+}
+
+export async function persistEntryDraft(serializedDraft: string) {
+  if (!isNativeSecureStoragePlatform()) {
+    await AsyncStorage.setItem(entryDraftStorageKey, serializedDraft);
+    return;
+  }
+  if (!(await secureStorageAvailable())) throw new Error('Secure storage is unavailable');
+  const key = await getOrCreateDataKey();
+  const nonce = await Crypto.getRandomBytesAsync(12);
+  const encrypted = encryptAppState(serializedDraft, key, nonce);
+  await AsyncStorage.setItem(entryDraftStorageKey, encrypted);
+}
+
+export async function discardEntryDraft() {
+  await AsyncStorage.removeItem(entryDraftStorageKey);
 }
 
 export async function discardStoredAppData(storageKey: string) {

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const legacyStorageKey = 'luna-log-app-v5';
 const encryptedStorageKey = 'luna-log-app-v6';
+const entryDraftStorageKey = 'luna-log-app-v6-entry-draft';
 const protectionSettingsKey = 'luna-log-app-v6-protection';
 
 export const exportedStorageKey = legacyStorageKey;
@@ -53,6 +54,18 @@ export async function loadStoredAppData(): Promise<StoredDataResult> {
 
 export async function persistStoredAppData(serializedState: string) {
   await AsyncStorage.setItem(legacyStorageKey, serializedState);
+}
+
+export async function loadEntryDraft() {
+  return AsyncStorage.getItem(entryDraftStorageKey);
+}
+
+export async function persistEntryDraft(serializedDraft: string) {
+  await AsyncStorage.setItem(entryDraftStorageKey, serializedDraft);
+}
+
+export async function discardEntryDraft() {
+  await AsyncStorage.removeItem(entryDraftStorageKey);
 }
 
 export async function discardStoredAppData(storageKey: string) {

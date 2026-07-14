@@ -12,6 +12,7 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { springs, useReducedMotion, useReducedTransparency } from './motion';
 import { hapticLight } from './haptics';
+import { useOptionalTheme } from './theme';
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const DEFAULT_MAX_HEIGHT = SCREEN_HEIGHT * 0.86;
 const CLOSE_THRESHOLD = 0.35;
@@ -20,10 +21,12 @@ const FLICK_VELOCITY = 700;
 type AppleSheetProps = PropsWithChildren<{
   visible: boolean;
   onClose: () => void;
+  onRequestClose?: () => void;
   maxHeight?: number;
   handleColor?: string;
   backgroundColor?: string;
   scrimColor?: string;
+  tint?: 'light' | 'dark';
   header?: ReactNode;
   style?: ViewStyle;
 }>;
@@ -35,16 +38,22 @@ type AppleSheetProps = PropsWithChildren<{
 export function AppleSheet({
   visible,
   onClose,
+  onRequestClose,
   maxHeight = DEFAULT_MAX_HEIGHT,
   handleColor = 'rgba(99,110,114,0.28)',
-  backgroundColor = 'rgba(255,255,255,0.94)',
-  scrimColor = 'rgba(20,24,38,0.42)',
+  backgroundColor,
+  scrimColor,
+  tint,
   header,
   style,
   children,
 }: AppleSheetProps) {
   const reducedMotion = useReducedMotion();
   const reducedTransparency = useReducedTransparency();
+  const theme = useOptionalTheme();
+  const resolvedBackgroundColor = backgroundColor || theme?.materialHeavy || 'rgba(255,255,255,0.94)';
+  const resolvedScrimColor = scrimColor || theme?.scrim || 'rgba(20,24,38,0.42)';
+  const resolvedTint = tint || (theme?.isDark ? 'dark' : 'light');
   const [mounted, setMounted] = useState(visible);
   const [sheetHeight, setSheetHeight] = useState(DEFAULT_MAX_HEIGHT);
 
@@ -59,8 +68,8 @@ export function AppleSheet({
   }, [reducedMotion, reducedMotionSV]);
 
   const closeSheet = useCallback(() => {
-    onClose();
-  }, [onClose]);
+    (onRequestClose || onClose)();
+  }, [onClose, onRequestClose]);
 
   const snapFeedback = useCallback(() => {
     void hapticLight();
@@ -132,6 +141,11 @@ export function AppleSheet({
       // Apple momentum projection
       const projected = translateY.value + (velocity / 1000) * 0.998 / (1 - 0.998);
       const shouldClose = projected > height * CLOSE_THRESHOLD || velocity > FLICK_VELOCITY;
+      if (shouldClose) {
+        runOnJS(snapFeedback)();
+        runOnJS(closeSheet)();
+        return;
+      }
       const target = shouldClose ? height : 0;
       runOnJS(snapFeedback)();
 
@@ -158,12 +172,12 @@ export function AppleSheet({
 
   if (!mounted) return null;
 
-  const solidBg = reducedTransparency ? '#ffffff' : backgroundColor;
+  const solidBg = reducedTransparency ? (theme?.card || '#ffffff') : resolvedBackgroundColor;
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={closeSheet} statusBarTranslucent>
       <GestureHandlerRootView style={styles.root}>
-        <Animated.View style={[styles.scrim, { backgroundColor: scrimColor }, scrimStyle]}>
+        <Animated.View style={[styles.scrim, { backgroundColor: resolvedScrimColor }, scrimStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
         </Animated.View>
 
@@ -189,7 +203,7 @@ export function AppleSheet({
           }}
         >
           {!reducedTransparency && Platform.OS !== 'web' ? (
-            <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={40} tint={resolvedTint} style={StyleSheet.absoluteFill} />
           ) : null}
           {!reducedTransparency && Platform.OS === 'web' ? (
             <View style={[StyleSheet.absoluteFill, styles.webMaterial]} />

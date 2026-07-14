@@ -8,20 +8,25 @@ import { StatusBar } from 'expo-status-bar';
 import { isValidDateKey, normalizeImportedState } from './src/domain/recordValidation';
 import {
   defaultProtectionSettings,
+  discardEntryDraft,
   discardStoredAppData,
   exportedStorageKey,
   loadProtectionSettings,
+  loadEntryDraft,
   loadStoredAppData,
   persistProtectionSettings,
+  persistEntryDraft,
   persistStoredAppData,
   type ProtectionSettings,
 } from './src/storage/secureAppStorage';
-import { AppleSheet, AnimatedBar, FadeSlideIn, Material, PressScale, ScaleOnSelect, hapticMedium, hapticSelection, hapticSuccess, hapticWarning } from './src/ui';import {
+import { AppSurface, AppleSheet, AnimatedBar, FadeSlideIn, Material, PressScale, ScaleOnSelect, ThemeProvider, hapticMedium, hapticSelection, hapticSuccess, hapticWarning, minimumTouchTarget, radius, spacing, typography, type ThemePalette } from './src/ui';
+import {
   Activity,
   Download,
   ExternalLink,
   BarChart3,
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleDot,
@@ -36,6 +41,7 @@ import { AppleSheet, AnimatedBar, FadeSlideIn, Material, PressScale, ScaleOnSele
   Hourglass,
   Info,
   Moon,
+  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
@@ -53,6 +59,7 @@ import {
   Alert,
   AppState as NativeAppState,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -63,6 +70,7 @@ import {
   Switch,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native';
 
@@ -123,6 +131,40 @@ type SymptomRecord = {
   intensity: number;
   symptoms: string[];
   notes?: string;
+};
+
+type EntryDraft = {
+  version: 1;
+  type: SheetType;
+  savedAt: string;
+  data: {
+    date: string;
+    time: string;
+    count: string;
+    duration: string;
+    partnerAlias: string;
+    sexTypes: string[];
+    protectionMethods: string[];
+    place: string;
+    mood: string;
+    satisfaction: string;
+    arousal: boolean;
+    partnerArousal: boolean;
+    orgasm: boolean;
+    toyUsed: boolean;
+    lingerie: boolean;
+    watchedAdultMovie: boolean;
+    syncedWithPartner: boolean;
+    ejaculationPlace: string;
+    initiator: 'self' | 'partner';
+    positions: string[];
+    soloTools: string[];
+    notes: string;
+    periodEnd: string;
+    flow: string;
+    pain: string;
+    symptoms: string[];
+  };
 };
 
 type AppState = {
@@ -249,7 +291,7 @@ type AppUpdateInfo = {
 };
 
 const today = new Date();
-const APP_VERSION = '1.0.12';
+const APP_VERSION = '1.0.13';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
@@ -262,6 +304,17 @@ const UPDATE_SOURCES: UpdateSource[] = [
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.13',
+    date: '2026-07-15',
+    title: '内容优先与可靠记录优化',
+    highlights: [
+      '首页收敛为当前状态与添加记录，筛选与低频操作按需展开，记录列表改为轻量行布局',
+      '记录表单支持本地草稿恢复、保存失败就地重试和渐进式细节填写，减少中断导致的数据丢失',
+      '日历补充多事件标记与可读说明，统计增加范围和峰值摘要，导入导出明确数据范围',
+      '新增主题 token、深色主题、44pt 触控目标及读屏语义，改善长时间使用的可读性与可访问性',
+    ],
+  },
   {
     version: '1.0.12',
     date: '2026-07-13',
@@ -361,36 +414,30 @@ const RELEASE_NOTES: ReleaseNote[] = [
   },
 ];
 
-type ThemePalette = {
-  primary: string;
-  primaryLight: string;
-  secondary: string;
-  bg: string;
-  card: string;
-  text: string;
-  sub: string;
-  line: string;
-  soft: string;
-  danger: string;
-  dangerSoft: string;
-  green: string;
-  gold: string;
-  period: string;
-  periodLight: string;
-  sex: string;
-  shadow: string;
-  webStage: string;
-  phoneFrame: string;
-  material: string;
-  materialHeavy: string;
-  segmentTrack: string;
-  segmentActive: string;
-  scrim: string;
-  appGradient: readonly [string, string, string];
-  heroGradient: readonly [string, string, string];
-  bubbleGradient: readonly [string, string];
-  avatarGradient: readonly [string, string];
-};
+function createDarkPalette(palette: ThemePalette): ThemePalette {
+  return {
+    ...palette,
+    isDark: true,
+    bg: '#111110',
+    card: '#1c1c1a',
+    text: '#f4f3ee',
+    sub: '#b4b3ad',
+    line: 'rgba(235,235,245,0.14)',
+    soft: 'rgba(255,255,255,0.08)',
+    dangerSoft: 'rgba(189,60,73,0.22)',
+    shadow: '#000000',
+    webStage: '#0b0b0a',
+    phoneFrame: '#050505',
+    material: '#1c1c1a',
+    materialHeavy: '#242421',
+    segmentTrack: '#292925',
+    segmentActive: '#242421',
+    scrim: 'rgba(0,0,0,0.64)',
+    appGradient: ['#181816', '#111110', '#111110'],
+    heroGradient: ['#1c1c1a', '#1c1c1a', '#1c1c1a'],
+    bubbleGradient: ['rgba(255,255,255,0.10)', 'rgba(255,255,255,0.05)'],
+  };
+}
 
 const themePalettes: Record<ThemeStyle, ThemePalette> = {
   classic: {
@@ -863,6 +910,8 @@ export default function App() {
   const [authenticating, setAuthenticating] = useState(false);
   const loadedRef = useRef(false);
   const persistenceEnabledRef = useRef(false);
+  const stateRef = useRef<AppState>(initialState);
+  const skipPersistedStateRef = useRef<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const storageWriteQueue = useRef<Promise<void>>(Promise.resolve());
   const protectionWriteQueue = useRef<Promise<void>>(Promise.resolve());
@@ -874,7 +923,9 @@ export default function App() {
   const timeline = useMemo(() => buildTimeline(state), [state]);
   const currentCopy = screenCopy[screen];
   const stats = useMemo(() => buildStats(state), [state]);
-  const activeTheme = themePalettes[state.settings.themeStyle || 'classic'];
+  const colorScheme = useColorScheme();
+  const baseTheme = themePalettes[state.settings.themeStyle || 'classic'];
+  const activeTheme = colorScheme === 'dark' ? createDarkPalette(baseTheme) : baseTheme;
   colors = activeTheme;
   styles = createStyles(activeTheme);
   recordMeta = buildRecordMeta(activeTheme);
@@ -955,6 +1006,7 @@ export default function App() {
             if (restoredProtectionSettings.appLockEnabled) setSessionUnlocked(false);
             setProtectionSettings(restoredProtectionSettings);
           }
+          stateRef.current = nextState;
           setState(nextState);
           persistenceEnabledRef.current = true;
         } catch {
@@ -976,12 +1028,13 @@ export default function App() {
   useEffect(() => {
     if (!loadedRef.current || !persistenceEnabledRef.current) return;
     const serialized = JSON.stringify(state);
-    storageWriteQueue.current = storageWriteQueue.current
-      .catch(() => undefined)
-      .then(() => persistStoredAppData(serialized))
-      .catch(() => {
-        showNotice('保存失败，请重试');
-      });
+    if (skipPersistedStateRef.current === serialized) {
+      skipPersistedStateRef.current = null;
+      return;
+    }
+    void enqueuePersist(serialized).catch(() => {
+      showNotice('保存失败，请重试');
+    });
   }, [state]);
 
   useEffect(() => {
@@ -999,7 +1052,39 @@ export default function App() {
   }, [protectionSettingsLoaded, protectionSettings.appLockEnabled]);
 
   function patchState(updater: (current: AppState) => AppState) {
-    setState((current) => updater(current));
+    setState((current) => {
+      const next = updater(current);
+      stateRef.current = next;
+      return next;
+    });
+  }
+
+  function enqueuePersist(serialized: string) {
+    const task = storageWriteQueue.current
+      .catch(() => undefined)
+      .then(() => persistStoredAppData(serialized));
+    storageWriteQueue.current = task;
+    return task;
+  }
+
+  async function commitRecordState(updater: (current: AppState) => AppState) {
+    if (!persistenceEnabledRef.current) {
+      showNotice('本地安全存储不可用，记录尚未保存。', undefined, 5000);
+      return false;
+    }
+
+    const next = updater(stateRef.current);
+    const serialized = JSON.stringify(next);
+    try {
+      await enqueuePersist(serialized);
+      skipPersistedStateRef.current = serialized;
+      stateRef.current = next;
+      setState(next);
+      return true;
+    } catch {
+      showNotice('保存失败，记录仍保留在表单中，可重试。', undefined, 5000);
+      return false;
+    }
   }
 
   function showNotice(message: string, action?: { label: string; run: () => void }, duration = 2500) {
@@ -1069,11 +1154,24 @@ export default function App() {
     ]);
   }
 
-  async function handleExportData() {
+  function handleExportData() {
     if (!hasAnyUserData(state)) {
       Alert.alert('无数据', '当前没有记录可以导出');
       return;
     }
+    const exportScope = [
+      `亲密记录 ${state.sexRecords.length} 条`,
+      `经期记录 ${state.periodRecords.length} 条`,
+      `每日经期状态 ${state.periodDayRecords.length} 条`,
+      `身体状态 ${state.symptomRecords.length} 条`,
+    ].join('；');
+    Alert.alert('导出备份', `将导出：${exportScope}。备份为明文 JSON，请仅保存或分享至受信任的位置。`, [
+      { text: '取消', style: 'cancel' },
+      { text: '导出', onPress: () => void exportData() },
+    ]);
+  }
+
+  async function exportData() {
     try {
       const filename = `luna-log-${Date.now()}.json`;
       const exportObj: LunaLogExport = {
@@ -1118,7 +1216,13 @@ export default function App() {
         Alert.alert('格式错误', '文件格式不正确，未找到 Luna Log 备份数据');
         return;
       }
-      Alert.alert('导入数据', '导入会覆盖当前本地记录，是否继续？', [
+      const importScope = [
+        `亲密记录 ${importedState.sexRecords.length} 条`,
+        `经期记录 ${importedState.periodRecords.length} 条`,
+        `每日经期状态 ${importedState.periodDayRecords.length} 条`,
+        `身体状态 ${importedState.symptomRecords.length} 条`,
+      ].join('；');
+      Alert.alert('导入数据', `导入会覆盖当前本地记录。备份包含：${importScope}。是否继续？`, [
         { text: '取消', style: 'cancel' },
         {
           text: '导入',
@@ -1130,9 +1234,12 @@ export default function App() {
                 // A backup cannot weaken protections configured on this device.
                 settings: { ...importedState.settings, ...protectionSettingsRef.current },
               };
-              await persistStoredAppData(JSON.stringify(nextState));
+              const serialized = JSON.stringify(nextState);
+              await persistStoredAppData(serialized);
               persistenceEnabledRef.current = true;
               setInvalidStoredData(null);
+              skipPersistedStateRef.current = serialized;
+              stateRef.current = nextState;
               setState(nextState);
               showNotice('导入成功，数据已恢复');
             } catch {
@@ -1232,7 +1339,9 @@ export default function App() {
             await discardStoredAppData(recoveryData.storageKey);
             persistenceEnabledRef.current = true;
             setInvalidStoredData(null);
-            setState({ ...initialState, settings: { ...initialState.settings, ...protectionSettingsRef.current } });
+            const nextState = { ...initialState, settings: { ...initialState.settings, ...protectionSettingsRef.current } };
+            stateRef.current = nextState;
+            setState(nextState);
             showNotice('已清除受损数据，可以重新开始记录');
           } catch {
             Alert.alert('操作失败', '无法清除受损数据，请稍后重试。');
@@ -1338,8 +1447,9 @@ export default function App() {
   }
 
   return (
+    <ThemeProvider theme={activeTheme}>
     <SafeAreaView style={styles.safe}>
-      <StatusBar style="dark" />
+      <StatusBar style={activeTheme.isDark ? 'light' : 'dark'} />
       <ScreenCaptureGuard enabled={protectionSettings.screenCaptureProtection} />
       <View style={Platform.OS === 'web' ? styles.webStage : styles.nativeStage}>
         <View style={Platform.OS === 'web' ? styles.webPhoneFrame : styles.nativeFrame}>
@@ -1364,11 +1474,14 @@ export default function App() {
                         ...current,
                         settings: { ...current.settings, privacyMode: !current.settings.privacyMode },
                       })),
+                    accessibilityRole: 'button',
+                    accessibilityLabel: state.settings.privacyMode ? '关闭隐私模式' : '开启隐私模式',
+                    accessibilityState: { selected: state.settings.privacyMode },
                   }}
                 >
                   {state.settings.privacyMode ? <EyeOff color={colors.primary} size={20} /> : <Eye color={colors.primary} size={20} />}
                 </PressScale>
-                <PressScale style={styles.avatarButton} pressableProps={{ onPress: openAbout }}>
+                <PressScale style={styles.avatarButton} pressableProps={{ onPress: openAbout, accessibilityRole: 'button', accessibilityLabel: '关于与更新' }}>
                   <LinearGradient colors={colors.avatarGradient} style={styles.avatar}>
                     <Info color="#fff" size={21} strokeWidth={2.7} />
                   </LinearGradient>
@@ -1381,13 +1494,13 @@ export default function App() {
               {loaded && screen === 'home' && (
                 <HomeScreen
                   state={state}
-                  stats={stats}
                   cycleInfo={cycleInfo}
                   timeline={timeline}
                   onDelete={deleteRecord}
                   onEditSex={openSexEditor}
                   onEditPeriod={openPeriodEditor}
                   onEditSymptom={openSymptomEditor}
+                  onOpenRecordMenu={() => setFabOpen(true)}
                 />
               )}
               {loaded && screen === 'calendar' && (
@@ -1404,7 +1517,19 @@ export default function App() {
                   onEditPeriodDay={openPeriodDayEditor}
                 />
               )}
-              {loaded && screen === 'insights' && <InsightsScreen state={state} stats={stats} cycleInfo={cycleInfo} range={statsRange} onRangeChange={setStatsRange} />}
+              {loaded && screen === 'insights' && (
+                <InsightsScreen
+                  state={state}
+                  stats={stats}
+                  cycleInfo={cycleInfo}
+                  range={statsRange}
+                  onRangeChange={setStatsRange}
+                  onAddEntry={() => {
+                    setScreen('home');
+                    setFabOpen(true);
+                  }}
+                />
+              )}
               {loaded && screen === 'settings' && (
                 <SettingsScreen
                   state={state}
@@ -1442,7 +1567,15 @@ export default function App() {
             )}
 
             {screen !== 'insights' && (
-              <PressScale style={styles.fab} pressableProps={{ onPress: () => setFabOpen((current) => !current) }}>
+              <PressScale
+                style={styles.fab}
+                pressableProps={{
+                  onPress: () => setFabOpen((current) => !current),
+                  accessibilityRole: 'button',
+                  accessibilityLabel: fabOpen ? '关闭添加记录菜单' : '添加记录',
+                  accessibilityState: { expanded: fabOpen },
+                }}
+              >
                 <LinearGradient colors={fabOpen ? [colors.secondary, colors.primaryLight] : colors.avatarGradient} style={styles.fabGradient}>
                   {fabOpen ? <X color="#fff" size={27} strokeWidth={2.7} /> : <Plus color="#fff" size={29} strokeWidth={2.7} />}
                 </LinearGradient>
@@ -1470,7 +1603,7 @@ export default function App() {
               onOpenUrl={openExternalUrl}
             />
 
-            <Material intensity={28} tint="light" solidFallback={colors.card} style={styles.bottomNav}>
+            <Material intensity={28} tint={activeTheme.isDark ? 'dark' : 'light'} solidFallback={colors.card} style={styles.bottomNav}>
               <NavItem active={screen === 'home'} label="首页" Icon={Home} onPress={() => setScreen('home')} />
               <NavItem active={screen === 'calendar'} label="日历" Icon={CalendarDays} onPress={() => setScreen('calendar')} />
               <NavItem active={screen === 'insights'} label="统计" Icon={BarChart3} onPress={() => setScreen('insights')} />
@@ -1486,28 +1619,32 @@ export default function App() {
               editingPeriodDayRecord={editingPeriodDayRecord}
               editingSymptomRecord={editingSymptomRecord}
               onClose={closeSheet}
-              onSaveSex={(record) => {
-                patchState((current) => ({
+              onSaveSex={async (record) => {
+                const saved = await commitRecordState((current) => ({
                   ...current,
                   sexRecords: editingSexRecord
                     ? current.sexRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.sexRecords, record],
                 }));
+                if (!saved) return false;
                 void hapticSuccess();
                 showNotice(editingSexRecord ? '已保存修改' : '已保存');
+                return true;
               }}
-              onSavePeriod={(record) => {
-                patchState((current) => ({
+              onSavePeriod={async (record) => {
+                const saved = await commitRecordState((current) => ({
                   ...current,
                   periodRecords: editingPeriodRecord
                     ? current.periodRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.periodRecords, record],
                 }));
+                if (!saved) return false;
                 void hapticSuccess();
                 showNotice(editingPeriodRecord ? '已保存修改' : '已保存');
+                return true;
               }}
-              onSavePeriodDay={(record) => {
-                patchState((current) => {
+              onSavePeriodDay={async (record) => {
+                const saved = await commitRecordState((current) => {
                   const withoutSameDate = current.periodDayRecords.filter((item) => item.id === record.id || item.date !== record.date);
                   return {
                     ...current,
@@ -1516,18 +1653,22 @@ export default function App() {
                       : [...withoutSameDate, record],
                   };
                 });
+                if (!saved) return false;
                 void hapticSuccess();
                 showNotice(editingPeriodDayRecord ? '已保存当天月经状态' : '已记录当天月经状态');
+                return true;
               }}
-              onSaveSymptom={(record) => {
-                patchState((current) => ({
+              onSaveSymptom={async (record) => {
+                const saved = await commitRecordState((current) => ({
                   ...current,
                   symptomRecords: editingSymptomRecord
                     ? current.symptomRecords.map((item) => (item.id === record.id ? record : item))
                     : [...current.symptomRecords, record],
                 }));
+                if (!saved) return false;
                 void hapticSuccess();
                 showNotice(editingSymptomRecord ? '已保存修改' : '已保存');
+                return true;
               }}
             />
           </View>
@@ -1535,27 +1676,28 @@ export default function App() {
         </View>
       </View>
     </SafeAreaView>
+    </ThemeProvider>
   );
 }
 
 function HomeScreen({
   state,
-  stats,
   cycleInfo,
   timeline,
   onDelete,
   onEditSex,
   onEditPeriod,
   onEditSymptom,
+  onOpenRecordMenu,
 }: {
   state: AppState;
-  stats: ReturnType<typeof buildStats>;
   cycleInfo: CycleInfo;
   timeline: TimelineItem[];
   onDelete: (type: RecordType, id: string) => void;
   onEditSex: (record: SexRecord) => void;
   onEditPeriod: (record: PeriodRecord) => void;
   onEditSymptom: (record: SymptomRecord) => void;
+  onOpenRecordMenu: () => void;
 }) {
   const privacyMode = state.settings.privacyMode;
   const cycleStatus = privacyMode
@@ -1567,6 +1709,7 @@ function HomeScreen({
   const [customRangeStart, setCustomRangeStart] = useState(toDateKey(addDays(new Date(), -6)));
   const [customRangeEnd, setCustomRangeEnd] = useState(toDateKey(new Date()));
   const [showAll, setShowAll] = useState(false);
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
   const timelineRangeOptions: Array<{ value: TimelineRange; label: string }> = [
     { value: 'week', label: '一周' },
@@ -1585,28 +1728,23 @@ function HomeScreen({
   ];
   const filtered = filter === 'all' ? rangedTimeline : rangedTimeline.filter((item) => item.type === filter);
   const visible = showAll ? filtered : filtered.slice(0, 20);
+  const activeRangeLabel = timelineRangeOptions.find((option) => option.value === timelineRange)?.label || '一周';
+  const activeTypeLabel = filterOptions.find((option) => option.value === filter)?.label || '全部';
   return (
     <View>
-      <View style={styles.heroCardShell}>
-        <View style={styles.heroCard}>
-          <LinearGradient colors={colors.heroGradient} style={styles.heroCardGradient} />
-          <View style={styles.heroCopy}>
-            <Text style={styles.heroPill}>{cycleStatus.pill}</Text>
-            <Text style={styles.heroTitle}>{cycleStatus.title}</Text>
-            <Text style={styles.heroHint}>{cycleStatus.hint}</Text>
-          </View>
-          <LinearGradient colors={colors.bubbleGradient} style={styles.cycleBubble}>
-            <Text style={styles.cycleDay}>{cycleBadge.value}</Text>
-            <Text style={styles.cycleDayLabel}>{cycleBadge.label}</Text>
-          </LinearGradient>
-        </View>
-      </View>
-
-      <View style={styles.quickGrid}>
-        <MetricCard label="本月" value={privacyMode ? '--' : String(stats.monthSexCount)} hint={privacyMode ? '已隐藏' : '亲密次数'} />
-        <MetricCard label="间隔" value={privacyMode ? '--' : String(stats.averageGap)} hint={privacyMode ? '已隐藏' : '平均天数'} />
-        <MetricCard label="周期" value={privacyMode ? '--' : String(cycleInfo?.cycleLength ?? state.settings.cycleDays)} hint={privacyMode ? '已隐藏' : cycleInfo?.confidence === 'high' ? '实测平均' : '预测天数'} />
-      </View>
+      <AppSurface kind="primary" style={styles.homeTask}>
+        <Text style={styles.homeTaskKicker}>{cycleStatus.pill}</Text>
+        <Text style={styles.homeTaskTitle}>{cycleStatus.title}</Text>
+        <Text style={styles.homeTaskHint}>{cycleStatus.hint}</Text>
+        {!privacyMode && <Text style={styles.homeTaskMeta}>{`${cycleBadge.label} ${cycleBadge.value}`}</Text>}
+        <PressScale
+          style={styles.homePrimaryAction}
+          pressableProps={{ onPress: onOpenRecordMenu, accessibilityRole: 'button', accessibilityLabel: '添加记录' }}
+        >
+          <Plus color="#fff" size={18} strokeWidth={2.8} />
+          <Text style={styles.homePrimaryActionText}>添加记录</Text>
+        </PressScale>
+      </AppSurface>
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>最近记录</Text>
@@ -1617,54 +1755,13 @@ function HomeScreen({
       ) : (
         <>
           {timeline.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.homeRangeTrack} style={styles.homeRangeScroll}>
-              {timelineRangeOptions.map((option) => {
-                const active = timelineRange === option.value;
-                return (
-                  <PressScale
-                    key={option.value}
-                    style={[styles.homeRangeItem, active && styles.homeRangeItemActive]}
-                    pressableProps={{
-                      onPress: () => {
-                        setTimelineRange(option.value);
-                        setShowAll(false);
-                      },
-                    }}
-                  >
-                    <Text style={[styles.homeRangeText, active && styles.homeRangeTextActive]}>{option.label}</Text>
-                  </PressScale>
-                );
-              })}
-            </ScrollView>
-          )}
-
-          {timelineRange === 'custom' && (
-            <View style={styles.customRangePanel}>
-              <DatePickerField label="开始日期" value={customRangeStart} onChange={setCustomRangeStart} />
-              <DatePickerField label="结束日期" value={customRangeEnd} onChange={setCustomRangeEnd} />
-            </View>
-          )}
-
-          {timeline.length > 0 && (
-            <View style={styles.filterRail}>
-              {filterOptions.map((option) => {
-                const active = filter === option.value;
-                return (
-                  <PressScale
-                    key={option.value}
-                    style={[styles.sheetChip, active && styles.sheetChipActive]}
-                    pressableProps={{
-                      onPress: () => {
-                        setFilter(option.value);
-                        setShowAll(false);
-                      },
-                    }}
-                  >
-                    <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{`${option.label} ${option.count}`}</Text>
-                  </PressScale>
-                );
-              })}
-            </View>
+            <PressScale
+              style={styles.homeFilterSummary}
+              pressableProps={{ onPress: () => setFilterSheetOpen(true), accessibilityRole: 'button', accessibilityLabel: `筛选：${activeRangeLabel}，${activeTypeLabel}` }}
+            >
+              <Text style={styles.homeFilterSummaryText}>{`${activeRangeLabel} · ${activeTypeLabel}`}</Text>
+              <ChevronDown color={colors.primary} size={18} strokeWidth={2.5} />
+            </PressScale>
           )}
 
           {rangedTimeline.length ? (
@@ -1695,11 +1792,152 @@ function HomeScreen({
               <Text style={styles.empty}>该筛选条件下还没有记录。</Text>
             )
           ) : (
-            <Text style={styles.empty}>还没有记录。点右下角 + 开始添加。</Text>
+            <Text style={styles.empty}>还没有记录。使用上方“添加记录”开始。</Text>
           )}
         </>
       )}
+      <HomeFilterSheet
+        visible={filterSheetOpen}
+        range={timelineRange}
+        type={filter}
+        customRangeStart={customRangeStart}
+        customRangeEnd={customRangeEnd}
+        onRangeChange={(next) => {
+          setTimelineRange(next);
+          setShowAll(false);
+        }}
+        onTypeChange={(next) => {
+          setFilter(next);
+          setShowAll(false);
+        }}
+        onCustomRangeStartChange={setCustomRangeStart}
+        onCustomRangeEndChange={setCustomRangeEnd}
+        onReset={() => {
+          setTimelineRange('week');
+          setFilter('all');
+          setCustomRangeStart(toDateKey(addDays(new Date(), -6)));
+          setCustomRangeEnd(toDateKey(new Date()));
+          setShowAll(false);
+        }}
+        onClose={() => setFilterSheetOpen(false)}
+      />
     </View>
+  );
+}
+
+function HomeFilterSheet({
+  visible,
+  range,
+  type: recordType,
+  customRangeStart,
+  customRangeEnd,
+  onRangeChange,
+  onTypeChange,
+  onCustomRangeStartChange,
+  onCustomRangeEndChange,
+  onReset,
+  onClose,
+}: {
+  visible: boolean;
+  range: TimelineRange;
+  type: 'all' | RecordType;
+  customRangeStart: string;
+  customRangeEnd: string;
+  onRangeChange: (range: TimelineRange) => void;
+  onTypeChange: (type: 'all' | RecordType) => void;
+  onCustomRangeStartChange: (date: string) => void;
+  onCustomRangeEndChange: (date: string) => void;
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  const rangeOptions: Array<{ value: TimelineRange; label: string }> = [
+    { value: 'week', label: '一周' },
+    { value: 'month', label: '一月' },
+    { value: 'halfYear', label: '半年' },
+    { value: 'year', label: '一年' },
+    { value: 'all', label: '全部' },
+    { value: 'custom', label: '自定义' },
+  ];
+  const typeOptions: Array<{ value: 'all' | RecordType; label: string }> = [
+    { value: 'all', label: '全部记录' },
+    { value: 'sex', label: '亲密' },
+    { value: 'period', label: '经期' },
+    { value: 'symptom', label: '身体状态' },
+  ];
+
+  return (
+    <AppleSheet
+      visible={visible}
+      onClose={onClose}
+      maxHeight={Platform.OS === 'web' ? 620 : undefined}
+      backgroundColor={colors.materialHeavy}
+      scrimColor={colors.scrim}
+      tint={colors.isDark ? 'dark' : 'light'}
+      style={styles.filterSheetPanel}
+      header={
+        <View style={styles.filterSheetHeader}>
+          <View>
+            <Text style={styles.dateLabel}>最近记录</Text>
+            <Text style={styles.sheetTitle}>筛选记录</Text>
+          </View>
+          <PressScale style={styles.sheetClose} pressableProps={{ onPress: onClose, accessibilityRole: 'button', accessibilityLabel: '关闭筛选' }}>
+            <X color={colors.sub} size={21} strokeWidth={2.6} />
+          </PressScale>
+        </View>
+      }
+    >
+      <ScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <OptionSection label="时间范围">
+          <View style={styles.sheetChipGroup}>
+            {rangeOptions.map((option) => {
+              const active = range === option.value;
+              return (
+                <PressScale
+                  key={option.value}
+                  style={[styles.sheetChip, active && styles.sheetChipActive]}
+                  pressableProps={{ onPress: () => onRangeChange(option.value), accessibilityRole: 'button', accessibilityLabel: option.label, accessibilityState: { selected: active } }}
+                >
+                  <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
+                </PressScale>
+              );
+            })}
+          </View>
+        </OptionSection>
+
+        {range === 'custom' && (
+          <View style={styles.customRangePanel}>
+            <DatePickerField label="开始日期" value={customRangeStart} onChange={onCustomRangeStartChange} />
+            <DatePickerField label="结束日期" value={customRangeEnd} onChange={onCustomRangeEndChange} />
+          </View>
+        )}
+
+        <OptionSection label="记录类型">
+          <View style={styles.sheetChipGroup}>
+            {typeOptions.map((option) => {
+              const active = recordType === option.value;
+              return (
+                <PressScale
+                  key={option.value}
+                  style={[styles.sheetChip, active && styles.sheetChipActive]}
+                  pressableProps={{ onPress: () => onTypeChange(option.value), accessibilityRole: 'button', accessibilityLabel: option.label, accessibilityState: { selected: active } }}
+                >
+                  <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
+                </PressScale>
+              );
+            })}
+          </View>
+        </OptionSection>
+
+        <View style={styles.filterSheetActions}>
+          <PressScale style={styles.filterResetButton} pressableProps={{ onPress: onReset, accessibilityRole: 'button', accessibilityLabel: '恢复默认筛选' }}>
+            <Text style={styles.filterResetText}>恢复默认</Text>
+          </PressScale>
+          <PressScale style={styles.filterApplyButton} pressableProps={{ onPress: onClose, accessibilityRole: 'button', accessibilityLabel: '应用筛选' }}>
+            <Text style={styles.filterApplyText}>完成</Text>
+          </PressScale>
+        </View>
+      </ScrollView>
+    </AppleSheet>
   );
 }
 
@@ -2143,12 +2381,14 @@ function InsightsScreen({
   cycleInfo,
   range,
   onRangeChange,
+  onAddEntry,
 }: {
   state: AppState;
   stats: ReturnType<typeof buildStats>;
   cycleInfo: CycleInfo;
   range: 'week' | 'month' | 'year';
   onRangeChange: (range: 'week' | 'month' | 'year') => void;
+  onAddEntry: () => void;
 }) {
   if (state.settings.privacyMode) {
     return (
@@ -2161,13 +2401,16 @@ function InsightsScreen({
   }
 
   const totalRecords = state.sexRecords.length + state.periodRecords.length + state.symptomRecords.length;
-  if (totalRecords === 0) return <EmptyInsights />;
+  if (totalRecords === 0) return <EmptyInsights onAddEntry={onAddEntry} />;
   if (state.sexRecords.length < 3) {
     return (
       <View style={styles.panel}>
         <BarChart3 size={44} color={colors.sub} strokeWidth={1.9} />
         <Text style={styles.emptyTitle}>记录还不够</Text>
         <Text style={styles.insightHint}>再记录几次亲密记录后将显示趋势、时长和时间分布</Text>
+        <PressScale style={styles.emptyAction} pressableProps={{ onPress: onAddEntry, accessibilityRole: 'button', accessibilityLabel: '添加记录' }}>
+          <Text style={styles.emptyActionText}>添加记录</Text>
+        </PressScale>
       </View>
     );
   }  const chart = buildSexChart(state, range);
@@ -2177,6 +2420,13 @@ function InsightsScreen({
   const chartMax = getChartMax(chart, range);
   const midTick = Math.round(chartMax / 2);
   const totalCount = chart.reduce((sum, item) => sum + item.count, 0);
+  const partneredTotal = chart.reduce((sum, item) => sum + item.partneredCount, 0);
+  const soloTotal = chart.reduce((sum, item) => sum + item.soloCount, 0);
+  const peak = chart.reduce((current, item) => (item.count > current.count ? item : current), chart[0]);
+  const rangeLabel = range === 'week' ? '本周' : range === 'month' ? '本月' : '今年';
+  const insightSummary = peak?.count
+    ? `${rangeLabel}共记录 ${totalCount} 次，其中伴侣亲密 ${partneredTotal} 次、个人亲密 ${soloTotal} 次；${peak.label}最多，为 ${peak.count} 次。`
+    : `${rangeLabel}暂无亲密记录。`;
   const chartHeight = 160;
   const symptomCounts = buildSymptomCounts(state);
   return (
@@ -2194,6 +2444,7 @@ function InsightsScreen({
           <Text style={styles.bigMetric}>{totalCount}</Text>
           <Text style={styles.bigMetricUnit}>次</Text>
         </View>
+        <Text style={styles.insightSummary}>{insightSummary}</Text>
         <View style={styles.columnChart}>
           <View style={styles.chartAxis}>
             <Text style={styles.chartAxisLabel}>{chartMax}</Text>
@@ -2284,12 +2535,15 @@ function InsightsScreen({
 }
 
 
-function EmptyInsights() {
+function EmptyInsights({ onAddEntry }: { onAddEntry: () => void }) {
   return (
     <View style={styles.emptyInsights}>
       <BarChart3 size={68} color={colors.sub} strokeWidth={1.8} />
       <Text style={styles.emptyTitle}>还没有统计数据</Text>
-      <Text style={styles.emptyHint}>点击右下角 + 开始记录</Text>
+      <Text style={styles.emptyHint}>添加几条记录后，这里会显示趋势和周期摘要。</Text>
+      <PressScale style={styles.emptyAction} pressableProps={{ onPress: onAddEntry, accessibilityRole: 'button', accessibilityLabel: '添加记录' }}>
+        <Text style={styles.emptyActionText}>添加记录</Text>
+      </PressScale>
     </View>
   );
 }function SettingsScreen({
@@ -2623,10 +2877,10 @@ function EntrySheet({
   editingPeriodDayRecord?: PeriodDayRecord | null;
   editingSymptomRecord?: SymptomRecord | null;
   onClose: () => void;
-  onSaveSex: (record: SexRecord) => void;
-  onSavePeriod: (record: PeriodRecord) => void;
-  onSavePeriodDay: (record: PeriodDayRecord) => void;
-  onSaveSymptom: (record: SymptomRecord) => void;
+  onSaveSex: (record: SexRecord) => Promise<boolean>;
+  onSavePeriod: (record: PeriodRecord) => Promise<boolean>;
+  onSavePeriodDay: (record: PeriodDayRecord) => Promise<boolean>;
+  onSaveSymptom: (record: SymptomRecord) => Promise<boolean>;
 }) {
   const [date, setDate] = useState(toDateKey(new Date()));
   const [time, setTime] = useState('12:00');
@@ -2655,10 +2909,17 @@ function EntrySheet({
   const [pain, setPain] = useState('0');
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [prefillUsed, setPrefillUsed] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!type) return;
     setPrefillUsed(false);
+    setDraftRestored(false);
+    setDetailsOpen(false);
+    setSaveError(null);
     if (isSexSheet(type) && editingSexRecord) {
       const value = new Date(editingSexRecord.dateTime);
       setDate(toDateKey(value));
@@ -2777,6 +3038,50 @@ function EntrySheet({
     }
   }, [type, initialDateKey, editingSexRecord, editingPeriodRecord, editingPeriodDayRecord, editingSymptomRecord, state.sexRecords, state.periodRecords, state.periodDayRecords, state.symptomRecords]);
 
+  useEffect(() => {
+    if (!type || editingSexRecord || editingPeriodRecord || editingPeriodDayRecord || editingSymptomRecord) return;
+    let alive = true;
+    loadEntryDraft()
+      .then((raw) => {
+        if (!alive || !raw) return;
+        const draft = JSON.parse(raw) as Partial<EntryDraft>;
+        if (draft.version !== 1 || draft.type !== type || !draft.data) return;
+        const data = draft.data as EntryDraft['data'];
+        if (typeof data.date !== 'string' || typeof data.notes !== 'string') return;
+        setDate(data.date);
+        setTime(data.time || '12:00');
+        setCount(data.count || '1');
+        setDuration(data.duration || '');
+        setPartnerAlias(data.partnerAlias || '');
+        setSexTypes(Array.isArray(data.sexTypes) ? data.sexTypes : []);
+        setProtectionMethods(Array.isArray(data.protectionMethods) ? data.protectionMethods : []);
+        setPlace(data.place || '');
+        setMood(data.mood || '');
+        setSatisfaction(data.satisfaction || '');
+        setArousal(Boolean(data.arousal));
+        setPartnerArousal(Boolean(data.partnerArousal));
+        setOrgasm(Boolean(data.orgasm));
+        setToyUsed(Boolean(data.toyUsed));
+        setLingerie(Boolean(data.lingerie));
+        setWatchedAdultMovie(Boolean(data.watchedAdultMovie));
+        setSyncedWithPartner(Boolean(data.syncedWithPartner));
+        setEjaculationPlace(data.ejaculationPlace || '');
+        setInitiator(data.initiator === 'partner' ? 'partner' : 'self');
+        setPositions(Array.isArray(data.positions) ? data.positions : []);
+        setSoloTools(Array.isArray(data.soloTools) ? data.soloTools : []);
+        setNotes(data.notes);
+        setPeriodEnd(data.periodEnd || '');
+        setFlow(data.flow || 'medium');
+        setPain(data.pain || '0');
+        setSymptoms(Array.isArray(data.symptoms) ? data.symptoms : []);
+        setDraftRestored(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [type, editingSexRecord, editingPeriodRecord, editingPeriodDayRecord, editingSymptomRecord]);
+
   function toggleSymptom(value: string) {
     setSymptoms((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
   }
@@ -2797,7 +3102,63 @@ function EntrySheet({
     setSoloTools((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
   }
 
-  function save() {
+  function buildEntryDraft(): EntryDraft | null {
+    if (!type || editingSexRecord || editingPeriodRecord || editingPeriodDayRecord || editingSymptomRecord) return null;
+    return {
+      version: 1,
+      type,
+      savedAt: new Date().toISOString(),
+      data: {
+        date, time, count, duration, partnerAlias, sexTypes, protectionMethods, place, mood, satisfaction,
+        arousal, partnerArousal, orgasm, toyUsed, lingerie, watchedAdultMovie, syncedWithPartner,
+        ejaculationPlace, initiator, positions, soloTools, notes, periodEnd, flow, pain, symptoms,
+      },
+    };
+  }
+
+  async function saveDraftAndClose() {
+    const draft = buildEntryDraft();
+    if (!draft) return;
+    setSaveError(null);
+    setIsSaving(true);
+    try {
+      await persistEntryDraft(JSON.stringify(draft));
+      onClose();
+    } catch {
+      Alert.alert('保存草稿失败', '无法保存未完成内容，请稍后重试。');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function discardDraftAndClose() {
+    try {
+      await discardEntryDraft();
+    } catch {
+      // Closing remains available even when stale draft cleanup fails.
+    } finally {
+      onClose();
+    }
+  }
+
+  function requestClose() {
+    if (isSaving) return;
+    const draft = buildEntryDraft();
+    if (!draft) {
+      Alert.alert('放弃未保存内容？', '关闭后本次修改不会保存。', [
+        { text: '继续编辑', style: 'cancel' },
+        { text: '放弃', style: 'destructive', onPress: onClose },
+      ]);
+      return;
+    }
+    Alert.alert('保存未完成内容？', '草稿仅保存在当前设备，并会在下次新建同类型记录时恢复。', [
+      { text: '继续编辑', style: 'cancel' },
+      { text: '保存草稿', onPress: () => void saveDraftAndClose() },
+      { text: '放弃', style: 'destructive', onPress: () => void discardDraftAndClose() },
+    ]);
+  }
+
+  async function save() {
     if (!date || !type) return;
     if (!isValidDateKey(date)) {
       Alert.alert('日期无效', '请选择有效日期后再保存。');
@@ -2819,9 +3180,12 @@ function EntrySheet({
       Alert.alert('持续时间无效', '持续时间需为 1 到 1440 分钟之间的整数。');
       return;
     }
-    if (isSexSheet(type)) {
-      const normalizedSexTypes = type === 'soloSex' ? ['自慰', ...soloTools.filter((item) => item !== 'Hand Job')] : sexTypes;
-      onSaveSex({
+    setIsSaving(true);
+    let saved = false;
+    try {
+      if (isSexSheet(type)) {
+        const normalizedSexTypes = type === 'soloSex' ? ['自慰', ...soloTools.filter((item) => item !== 'Hand Job')] : sexTypes;
+        saved = await onSaveSex({
         id: editingSexRecord?.id || uid('sex'),
         dateTime: new Date(`${date}T${time || '12:00'}:00`).toISOString(),
         count: Math.max(1, Math.min(99, Number(count) || 1)),
@@ -2844,10 +3208,10 @@ function EntrySheet({
         positions,
         soloTools,
         notes: notes.trim(),
-      });
-    }
-    if (type === 'period') {
-      onSavePeriod({
+        });
+      }
+      if (type === 'period') {
+        saved = await onSavePeriod({
         id: editingPeriodRecord?.id || uid('period'),
         startDate: date,
         endDate: periodEnd || undefined,
@@ -2855,28 +3219,38 @@ function EntrySheet({
         painLevel: Number(pain) || 0,
         symptoms,
         notes: notes.trim(),
-      });
-    }
-    if (type === 'periodDay') {
-      onSavePeriodDay({
+        });
+      }
+      if (type === 'periodDay') {
+        saved = await onSavePeriodDay({
         id: editingPeriodDayRecord?.id || uid('period-day'),
         date,
         flow,
         painLevel: Number(pain) || 0,
         symptoms,
         notes: notes.trim(),
-      });
-    }
-    if (type === 'symptom') {
-      onSaveSymptom({
+        });
+      }
+      if (type === 'symptom') {
+        saved = await onSaveSymptom({
         id: editingSymptomRecord?.id || uid('symptom'),
         date,
         intensity: Number(pain) || 1,
         symptoms,
         notes: notes.trim(),
-      });
+        });
+      }
+    } finally {
+      setIsSaving(false);
     }
-    onClose();
+    if (saved) {
+      if (!editingSexRecord && !editingPeriodRecord && !editingPeriodDayRecord && !editingSymptomRecord) {
+        await discardEntryDraft().catch(() => undefined);
+      }
+      onClose();
+    } else {
+      setSaveError('保存失败，内容仍保留在表单中。请检查设备存储后重试。');
+    }
   }
 
   const sexMode = isSexSheet(type) ? type : null;
@@ -2893,24 +3267,38 @@ function EntrySheet({
     <AppleSheet
       visible={Boolean(type)}
       onClose={onClose}
+      onRequestClose={requestClose}
       maxHeight={Platform.OS === 'web' ? 680 : undefined}
       backgroundColor={colors.materialHeavy}
       scrimColor={colors.scrim}
+      tint={colors.isDark ? 'dark' : 'light'}
       header={
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.dateLabel}>{sheetShort}</Text>
             <Text style={styles.sheetTitle}>{editingRecord ? `编辑${typeMeta.label}` : typeMeta.label}</Text>
           </View>
-          <PressScale style={styles.sheetClose} pressableProps={{ onPress: onClose, hitSlop: 8 }}>
+          <PressScale
+            style={styles.sheetClose}
+            disabled={isSaving}
+            pressableProps={{ onPress: requestClose, hitSlop: 8, accessibilityRole: 'button', accessibilityLabel: '关闭记录表单' }}
+          >
             <X color={colors.sub} size={21} strokeWidth={2.6} />
           </PressScale>
         </View>
       }
       style={styles.sheetPanel}
     >
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScrollContent} bounces>
+      <KeyboardAvoidingView style={styles.sheetKeyboardAvoider} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.sheetScrollContent}
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        bounces
+      >
         <View style={styles.formGrid}>
+          {draftRestored && <Text style={styles.draftHint}>已恢复未完成草稿</Text>}
           {prefillUsed && <Text style={styles.prefillHint}>已自动填入上次的选择，可修改</Text>}
           <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
           {showCoreSexFields && <TimePickerField label="时间" value={time} onChange={setTime} />}
@@ -2926,6 +3314,7 @@ function EntrySheet({
                   { label: '药物', icon: 'pill' },
                 ]}
                 selected={protectionMethods}
+                multiple={false}
                 onToggle={toggleProtection}
               />
             </OptionSection>
@@ -2939,6 +3328,7 @@ function EntrySheet({
                   { label: '女用玩具', icon: 'wand' },
                 ]}
                 selected={soloTools}
+                multiple
                 onToggle={toggleSoloTool}
               />
             </OptionSection>
@@ -2955,6 +3345,24 @@ function EntrySheet({
           )}
 
           {showPartneredDetails && (
+            <PressScale
+              style={styles.detailsDisclosure}
+              pressableProps={{
+                onPress: () => setDetailsOpen((open) => !open),
+                accessibilityRole: 'button',
+                accessibilityLabel: '更多亲密细节',
+                accessibilityState: { expanded: detailsOpen },
+              }}
+            >
+              <View>
+                <Text style={styles.detailsDisclosureTitle}>更多细节</Text>
+                <Text style={styles.detailsDisclosureHint}>按需补充地点、姿势和个人感受</Text>
+              </View>
+              <ChevronDown color={colors.primary} size={20} strokeWidth={2.6} style={detailsOpen ? styles.detailsDisclosureIconOpen : undefined} />
+            </PressScale>
+          )}
+
+          {showPartneredDetails && detailsOpen && (
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>更多细节</Text>
               <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />
@@ -2982,17 +3390,35 @@ function EntrySheet({
                 />
               </OptionSection>
               <SwitchOption label="情趣内衣" hint="滑动开关来选择是否穿戴了情趣内衣" value={lingerie} onChange={setLingerie} Icon={Sparkles} />
-              <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
+              <SwitchOption label="已同步到其他记录" hint="仅作为本地标记，不会发送任何数据" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
             </View>
           )}
 
           {showSoloDetails && (
+            <PressScale
+              style={styles.detailsDisclosure}
+              pressableProps={{
+                onPress: () => setDetailsOpen((open) => !open),
+                accessibilityRole: 'button',
+                accessibilityLabel: '更多个人亲密细节',
+                accessibilityState: { expanded: detailsOpen },
+              }}
+            >
+              <View>
+                <Text style={styles.detailsDisclosureTitle}>更多细节</Text>
+                <Text style={styles.detailsDisclosureHint}>按需补充地点、感受和个人偏好</Text>
+              </View>
+              <ChevronDown color={colors.primary} size={20} strokeWidth={2.6} style={detailsOpen ? styles.detailsDisclosureIconOpen : undefined} />
+            </PressScale>
+          )}
+
+          {showSoloDetails && detailsOpen && (
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>更多细节</Text>
               <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
               <SwitchOption label="观看成人电影" hint="滑动开关来选择是否观看" value={watchedAdultMovie} onChange={setWatchedAdultMovie} Icon={Eye} />
               <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
-              <SwitchOption label="同步" hint="滑动开关来选择是否同步到伴侣记录" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
+              <SwitchOption label="已同步到其他记录" hint="仅作为本地标记，不会发送任何数据" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
             </View>
           )}
 
@@ -3033,13 +3459,23 @@ function EntrySheet({
             </View>
           )}
           <TextField label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
-          <PressScale style={styles.primaryButton} pressableProps={{ onPress: save }}>
+          {saveError && (
+            <Text style={styles.saveError} accessibilityRole={'alert'}>
+              {saveError}
+            </Text>
+          )}
+          <PressScale
+            style={styles.primaryButton}
+            disabled={isSaving}
+            pressableProps={{ onPress: save, accessibilityRole: 'button', accessibilityLabel: isSaving ? '正在保存记录' : editingRecord ? '保存修改' : '保存记录', accessibilityState: { disabled: isSaving, busy: isSaving } }}
+          >
             <LinearGradient colors={colors.avatarGradient} style={styles.primaryButtonGradient}>
-              <Text style={styles.primaryButtonText}>{editingRecord ? '保存修改' : '保存记录'}</Text>
+              {isSaving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.primaryButtonText}>{editingRecord ? '保存修改' : '保存记录'}</Text>}
             </LinearGradient>
           </PressScale>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </AppleSheet>
   );
 }
@@ -3123,7 +3559,7 @@ function RecordCard({
   const meta = recordMeta[item.type];
   const sexKind = item.type === 'sex' ? getSexKindMeta(sexRecord) : null;
   const Icon = sexKind?.Icon || meta.Icon;
-  const iconColors = sexKind?.colors || meta.colors;
+  const iconColor = sexKind?.color || meta.colors[0];
   const canEdit = Boolean(sexRecord || periodRecord || symptomRecord);
   const summary = getRecordSummary(item, sexRecord, periodRecord, symptomRecord);
 
@@ -3133,33 +3569,59 @@ function RecordCard({
     if (symptomRecord) onEditSymptom(symptomRecord);
   }
 
+  function openActions() {
+    Alert.alert(summary.title, summary.meta, [
+      { text: '取消', style: 'cancel' },
+      ...(canEdit ? [{ text: '编辑', onPress: edit }] : []),
+      {
+        text: '删除',
+        style: 'destructive' as const,
+        onPress: () => Alert.alert('删除记录', '删除后可以在 5 秒内撤销。确定删除？', [
+          { text: '取消', style: 'cancel' },
+          { text: '删除', style: 'destructive', onPress: () => onDelete(item.type, item.id) },
+        ]),
+      },
+    ]);
+  }
+
   return (
     <FadeSlideIn delay={Math.min(index, 8) * 35} distance={8}>
-      <PressScale style={styles.recordCard} pressableProps={{ onPress: () => canEdit && edit() }}>
-        <LinearGradient colors={iconColors} style={styles.recordIcon}>
-          <Icon color="#fff" size={22} strokeWidth={2.6} />
-        </LinearGradient>
+      <View style={styles.recordCard}>
+        <PressScale
+          style={styles.recordMainAction}
+        pressableProps={{
+          onPress: () => canEdit && edit(),
+          accessibilityRole: 'button',
+          accessibilityLabel: `${summary.title}，${summary.meta}`,
+          accessibilityHint: canEdit ? '点按编辑，更多操作可通过更多按钮打开' : undefined,
+        }}
+      >
+        <View style={styles.recordIcon}>
+          <Icon color={iconColor} size={20} strokeWidth={2.4} />
+        </View>
         <View style={styles.recordCopy}>
           <Text style={styles.recordTitle}>{summary.title}</Text>
           <Text style={styles.recordMeta}>{summary.meta}</Text>
           {!!summary.detail && <Text style={styles.recordDetailPill}>{summary.detail}</Text>}
         </View>
-        {canEdit && (
-          <PressScale style={styles.editButton} pressableProps={{ onPress: edit, hitSlop: 6 }}>
-            <Pencil color={colors.primary} size={16} strokeWidth={2.5} />
-          </PressScale>
-        )}
-        <PressScale style={styles.deleteButton} pressableProps={{ onPress: () => onDelete(item.type, item.id), hitSlop: 6 }}>
-          <Trash2 color={colors.danger} size={16} strokeWidth={2.5} />
         </PressScale>
-      </PressScale>
+        <PressScale
+          style={styles.recordMoreButton}
+          pressableProps={{ onPress: openActions, hitSlop: 6, accessibilityRole: 'button', accessibilityLabel: `${summary.title}的更多操作` }}
+        >
+          <MoreHorizontal color={colors.sub} size={20} strokeWidth={2.4} />
+        </PressScale>
+      </View>
     </FadeSlideIn>
   );
 }
 
 function NavItem({ active, label, Icon, onPress }: { active: boolean; label: string; Icon: LucideIcon; onPress: () => void }) {
   return (
-    <PressScale style={styles.navItem} pressableProps={{ onPress }}>
+    <PressScale
+      style={styles.navItem}
+      pressableProps={{ onPress, accessibilityRole: 'tab', accessibilityLabel: label, accessibilityState: { selected: active } }}
+    >
       <View style={[styles.navIconWrap, active && styles.navIconWrapActive]}>
         <Icon color={active ? colors.primary : colors.sub} size={19} strokeWidth={active ? 2.8 : 2.3} />
       </View>
@@ -3242,7 +3704,15 @@ function CalendarDay({
   const lunar = lunarDayLabel(date);
   const isToday = key === toDateKey(new Date());
   const outside = date.getMonth() !== visibleMonth.getMonth();
-  const eventMarker = markers[0];
+  const toneLabel = tone === 'period' ? '经期' : tone === 'predictedPeriod' ? '预计经期' : tone === 'fertile' ? '易孕期' : '';
+  const markerLabels: Record<string, string> = {
+    'partnered-sex': '伴侣亲密',
+    'solo-sex': '个人亲密',
+    'period-day': '当天月经状态',
+    symptom: '身体状态',
+  };
+  const eventLabel = markers.length ? `，${markers.map((marker) => markerLabels[marker]).join('、')}` : '';
+  const calendarLabel = privacyMode ? `${longDate(date)}，隐私模式已隐藏详情` : `${longDate(date)}${toneLabel ? `，${toneLabel}` : ''}${eventLabel}`;
   return (
     <ScaleOnSelect selected={selected} style={styles.calendarDayScaleWrap}>
       <PressScale
@@ -3255,12 +3725,13 @@ function CalendarDay({
           isToday && styles.calendarDayToday,
           selected && styles.calendarDaySelected,
         ]}
-        pressableProps={{ onPress }}
+        pressableProps={{ onPress, accessibilityRole: 'button', accessibilityLabel: calendarLabel, accessibilityState: { selected } }}
       >
         <Text style={[styles.calendarDayNumber, tone === 'period' && styles.calendarDayNumberOnTone]}>{date.getDate()}</Text>
         <Text style={[styles.calendarDayLunar, tone && styles.calendarDayLunarOnTone]} numberOfLines={1}>{privacyMode ? '' : lunar}</Text>
         <View style={styles.calendarDayMarkerSlot}>
-          {eventMarker && <View style={[styles.calendarDayMarkerDot, markerStyle(eventMarker)]} />}
+          {markers.slice(0, 3).map((marker) => <View key={marker} style={[styles.calendarDayMarkerDot, markerStyle(marker)]} />)}
+          {markers.length > 3 && <Text style={styles.calendarDayMarkerCount}>{`+${markers.length - 3}`}</Text>}
         </View>
       </PressScale>
     </ScaleOnSelect>
@@ -3278,7 +3749,10 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function RangeButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   return (
-    <PressScale style={[styles.segmentButton, active && styles.segmentButtonActive]} pressableProps={{ onPress }}>
+    <PressScale
+      style={[styles.segmentButton, active && styles.segmentButtonActive]}
+      pressableProps={{ onPress, accessibilityRole: 'button', accessibilityLabel: label, accessibilityState: { selected: active } }}
+    >
       <Text style={[styles.segmentButtonText, active && styles.segmentButtonTextActive]}>{label}</Text>
     </PressScale>
   );
@@ -3517,7 +3991,14 @@ function SwitchOption({ label, hint, value, onChange, Icon }: { label: string; h
         <Text style={styles.switchLabel}>{label}</Text>
         <Text style={styles.switchHint}>{hint}</Text>
       </View>
-      <Pressable style={[styles.prettySwitch, value && styles.prettySwitchActive]} onPress={() => onChange(!value)}>
+      <Pressable
+        style={[styles.prettySwitch, value && styles.prettySwitchActive]}
+        onPress={() => onChange(!value)}
+        accessibilityRole="switch"
+        accessibilityLabel={label}
+        accessibilityHint={hint}
+        accessibilityState={{ checked: value }}
+      >
         <View style={[styles.prettySwitchThumb, value && styles.prettySwitchThumbActive]}>
           <Icon color={value ? colors.primary : colors.sub} size={15} strokeWidth={2.6} />
         </View>
@@ -3550,10 +4031,12 @@ const choiceImageMap: Partial<Record<IconName, number>> = {
 function IconChoiceGrid({
   options,
   selected,
+  multiple = false,
   onToggle,
 }: {
   options: Array<{ label: string; icon: IconName }>;
   selected: string[];
+  multiple?: boolean;
   onToggle: (value: string) => void;
 }) {
   return (
@@ -3563,7 +4046,14 @@ function IconChoiceGrid({
         const imageSource = choiceImageMap[option.icon];
         const isProtectionIcon = option.icon === 'noProtect' || option.icon === 'condom' || option.icon === 'pill';
         return (
-          <Pressable key={option.label} style={styles.iconChoiceItem} onPress={() => onToggle(option.label)}>
+          <Pressable
+            key={option.label}
+            style={styles.iconChoiceItem}
+            onPress={() => onToggle(option.label)}
+            accessibilityRole={multiple ? 'checkbox' : 'radio'}
+            accessibilityLabel={option.label}
+            accessibilityState={multiple ? { checked: active } : { selected: active }}
+          >
             <View style={[styles.aphroditeIconBubble, isProtectionIcon && styles.aphroditeIconBubbleImageOnly, active && styles.aphroditeIconBubbleActive, active && isProtectionIcon && styles.aphroditeIconBubbleImageOnlyActive]}>
               {imageSource ? (
                 <Image
@@ -4265,7 +4755,14 @@ function ChipSelect({ options, value, onChange }: { options: string[]; value: st
       {options.map((option) => {
         const active = value === option;
         return (
-          <Pressable key={option} style={[styles.sheetChip, active && styles.sheetChipActive]} onPress={() => onChange(active ? '' : option)}>
+          <Pressable
+            key={option}
+            style={[styles.sheetChip, active && styles.sheetChipActive]}
+            onPress={() => onChange(active ? '' : option)}
+            accessibilityRole="button"
+            accessibilityLabel={option}
+            accessibilityState={{ selected: active }}
+          >
             <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option}</Text>
           </Pressable>
         );
@@ -4300,6 +4797,8 @@ function TextField({
         placeholderTextColor="#9aa2b7"
         keyboardType={keyboardType}
         multiline={multiline}
+        accessibilityLabel={label}
+        accessibilityHint={placeholder}
       />
     </View>
   );
@@ -4549,9 +5048,12 @@ function buildCalendarDays(visibleMonth: Date) {
 function getMarkersForDay(date: Date, state: AppState, _info: CycleInfo) {
   const key = toDateKey(date);
   const sexRecords = state.sexRecords.filter((record) => toDateKey(new Date(record.dateTime)) === key);
-  if (sexRecords.some((record) => !isSoloSexRecord(record))) return ['partnered-sex'];
-  if (sexRecords.some((record) => isSoloSexRecord(record))) return ['solo-sex'];
-  return [];
+  const markers: string[] = [];
+  if (sexRecords.some((record) => !isSoloSexRecord(record))) markers.push('partnered-sex');
+  if (sexRecords.some((record) => isSoloSexRecord(record))) markers.push('solo-sex');
+  if (state.periodDayRecords.some((record) => record.date === key)) markers.push('period-day');
+  if (state.symptomRecords.some((record) => record.date === key)) markers.push('symptom');
+  return markers;
 }
 
 function getCalendarTone(date: Date, state: AppState, info: CycleInfo): 'period' | 'predictedPeriod' | 'fertile' | null {
@@ -4748,8 +5250,11 @@ function getDayCycleStatus(date: Date, state: AppState, info: CycleInfo): {
   };
 }
 
-function markerStyle(_marker: string) {
-  return { backgroundColor: '#2f80ed' };
+function markerStyle(marker: string) {
+  if (marker === 'partnered-sex') return { backgroundColor: colors.sex };
+  if (marker === 'solo-sex') return { backgroundColor: colors.primary };
+  if (marker === 'period-day') return { backgroundColor: colors.period };
+  return { backgroundColor: colors.gold };
 }
 function buildSexChart(state: AppState, range: 'week' | 'month' | 'year') {
   if (range === 'week') {
@@ -4949,8 +5454,8 @@ function createStyles(theme: ThemePalette) {
     zIndex: 3,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: 16,
-    paddingHorizontal: 24,
+    gap: spacing[4],
+    paddingHorizontal: spacing[6],
     paddingTop: Platform.OS === 'android' ? 46 : 32,
     paddingBottom: 18,
   },
@@ -4966,10 +5471,8 @@ function createStyles(theme: ThemePalette) {
   },
   title: {
     color: colors.text,
-    fontSize: 28,
-    fontWeight: '700',
-    lineHeight: 32,
-    letterSpacing: -0.4,
+    ...typography.pageTitle,
+    letterSpacing: 0,
   },
   subtitle: {
     marginTop: 4,
@@ -5059,7 +5562,7 @@ function createStyles(theme: ThemePalette) {
     fontSize: 26,
     fontWeight: '700',
     lineHeight: 31,
-    letterSpacing: -0.4,
+    letterSpacing: 0,
   },
   heroHint: {
     color: colors.sub,
@@ -5078,7 +5581,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 32,
     fontWeight: '700',
-    letterSpacing: -0.6,
+    letterSpacing: 0,
   },
   cycleDayLabel: {
     color: colors.sub,
@@ -5090,6 +5593,66 @@ function createStyles(theme: ThemePalette) {
     gap: 10,
     marginTop: 14,
     marginBottom: 28,
+  },
+  homeTask: {
+    gap: spacing[2],
+    marginBottom: spacing[6] + spacing[1],
+    padding: spacing[4],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  homeTaskKicker: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  homeTaskTitle: {
+    color: colors.text,
+    ...typography.sectionTitle,
+  },
+  homeTaskHint: {
+    color: colors.sub,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  homeTaskMeta: {
+    color: colors.sub,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  homePrimaryAction: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[2],
+    marginTop: spacing[1],
+    borderRadius: radius.md,
+    paddingHorizontal: spacing[4],
+    backgroundColor: colors.primary,
+  },
+  homePrimaryActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  homeFilterSummary: {
+    minHeight: 40,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: -14,
+    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.soft,
+  },
+  homeFilterSummaryText: {
+    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   metricCard: {
     flex: 1,
@@ -5110,7 +5673,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 24,
     fontWeight: '700',
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   metricHint: {
     marginTop: 2,
@@ -5128,7 +5691,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 18,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   textAction: {
     minHeight: 34,
@@ -5180,21 +5743,26 @@ function createStyles(theme: ThemePalette) {
   recordCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...cardShadow,
+    gap: spacing[3],
+    minHeight: 72,
+    paddingVertical: spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  recordMainAction: {
+    flex: 1,
+    minHeight: minimumTouchTarget,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
   },
   recordIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 20,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.soft,
   },
   recordCopy: {
     flex: 1,
@@ -5204,7 +5772,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 15,
     fontWeight: '700',
-    letterSpacing: -0.15,
+    letterSpacing: 0,
   },
   recordMeta: {
     color: colors.sub,
@@ -5213,27 +5781,14 @@ function createStyles(theme: ThemePalette) {
   },
   recordDetailPill: {
     alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    color: colors.primary,
-    backgroundColor: colors.soft,
+    color: colors.sub,
     fontSize: 11,
-    fontWeight: '900',
-    overflow: 'hidden',
+    fontWeight: '500',
   },
-  deleteButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.dangerSoft,
-  },
-  editButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 15,
+  recordMoreButton: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.soft,
@@ -5245,7 +5800,7 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 22,
     padding: 18,
     color: colors.sub,
-    backgroundColor: 'rgba(255,255,255,0.64)',
+    backgroundColor: colors.soft,
     textAlign: 'center',
     lineHeight: 20,
   },
@@ -5268,9 +5823,9 @@ function createStyles(theme: ThemePalette) {
     marginBottom: 12,
   },
   roundButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: minimumTouchTarget,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.soft,
@@ -5589,7 +6144,7 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 999,
     paddingHorizontal: 10,
     minHeight: 30,
-    backgroundColor: 'rgba(255,255,255,0.76)',
+    backgroundColor: colors.soft,
   },
   legendDot: {
     width: 8,
@@ -5696,14 +6251,22 @@ function createStyles(theme: ThemePalette) {
   },
   calendarDayMarkerSlot: {
     height: 8,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 3,
     marginTop: 1,
   },
   calendarDayMarkerDot: {
     width: 5,
     height: 5,
     borderRadius: 999,
+  },
+  calendarDayMarkerCount: {
+    color: colors.sub,
+    fontSize: 8,
+    fontWeight: '700',
+    lineHeight: 9,
   },
   panel: {
     borderRadius: 26,
@@ -5718,7 +6281,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 16,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
     marginBottom: 14,
   },
   sexChartPanel: {
@@ -5762,7 +6325,7 @@ function createStyles(theme: ThemePalette) {
     fontSize: 46,
     fontWeight: '700',
     lineHeight: 50,
-    letterSpacing: -0.8,
+    letterSpacing: 0,
   },
   bigMetricUnit: {
     color: colors.sub,
@@ -5770,6 +6333,12 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '700',
     marginLeft: 5,
     marginBottom: 6,
+  },
+  insightSummary: {
+    marginTop: 6,
+    color: colors.sub,
+    fontSize: 13,
+    lineHeight: 19,
   },
   columnChart: {
     height: 204,
@@ -6022,7 +6591,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 20,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   tagCloud: {
     flexDirection: 'row',
@@ -6054,13 +6623,25 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 17,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   emptyHint: {
     color: colors.sub,
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
+  },
+  emptyAction: {
+    minHeight: 44,
+    borderRadius: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    backgroundColor: colors.primary,
+  },
+  emptyActionText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   insightHint: {
     color: colors.sub,
@@ -6232,7 +6813,7 @@ function createStyles(theme: ThemePalette) {
     borderRadius: 20,
     padding: 13,
     marginBottom: 12,
-    backgroundColor: 'rgba(255,255,255,0.68)',
+    backgroundColor: colors.soft,
     borderWidth: 1,
     borderColor: colors.line,
   },
@@ -6362,7 +6943,7 @@ function createStyles(theme: ThemePalette) {
     gap: 12,
     borderRadius: 18,
     padding: 13,
-    backgroundColor: 'rgba(255,255,255,0.68)',
+    backgroundColor: colors.soft,
     borderWidth: 1,
     borderColor: colors.line,
   },
@@ -6426,7 +7007,7 @@ function createStyles(theme: ThemePalette) {
     borderColor: 'transparent',
   },
   themeOptionActive: {
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: colors.card,
     borderColor: colors.primary,
   },
   themeSwatch: {
@@ -6615,9 +7196,9 @@ function createStyles(theme: ThemePalette) {
     ...cardShadow,
   },
   datePickerTriggerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
+    width: minimumTouchTarget,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.soft,
@@ -6656,7 +7237,7 @@ function createStyles(theme: ThemePalette) {
     padding: 14,
     backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.82)',
+    borderColor: colors.line,
     ...cardShadow,
   },
   datePickerHeader: {
@@ -6666,9 +7247,9 @@ function createStyles(theme: ThemePalette) {
     marginBottom: 12,
   },
   datePickerNav: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
+    width: minimumTouchTarget,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.soft,
@@ -6708,8 +7289,8 @@ function createStyles(theme: ThemePalette) {
   },
   datePickerDay: {
     width: '13.45%',
-    height: 38,
-    borderRadius: 12,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.68)',
@@ -6797,8 +7378,8 @@ function createStyles(theme: ThemePalette) {
     alignSelf: 'stretch',
   },
   timeOption: {
-    height: 40,
-    borderRadius: 12,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -7301,10 +7882,61 @@ function createStyles(theme: ThemePalette) {
   sheetPanel: {
     paddingHorizontal: 24,
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.materialHeavy,
+  },
+  filterSheetPanel: {
+    paddingHorizontal: 24,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
+    backgroundColor: colors.materialHeavy,
+  },
+  filterSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    marginBottom: 8,
+  },
+  filterSheetContent: {
+    gap: 18,
+    paddingBottom: 12,
+  },
+  filterSheetActions: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingTop: 6,
+  },
+  filterResetButton: {
+    minHeight: 48,
+    flex: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.soft,
+  },
+  filterResetText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  filterApplyButton: {
+    minHeight: 48,
+    flex: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+  },
+  filterApplyText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   sheetScrollContent: {
     paddingBottom: 12,
+  },
+  sheetKeyboardAvoider: {
+    flex: 1,
+    flexShrink: 1,
   },
   sheetHandle: {
     width: 42,
@@ -7325,7 +7957,7 @@ function createStyles(theme: ThemePalette) {
     color: colors.text,
     fontSize: 22,
     fontWeight: '700',
-    letterSpacing: -0.3,
+    letterSpacing: 0,
   },
   detailsSection: {
     gap: 10,
@@ -7341,10 +7973,36 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '700',
     marginBottom: 2,
   },
+  detailsDisclosure: {
+    minHeight: 64,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  detailsDisclosureTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  detailsDisclosureHint: {
+    marginTop: 3,
+    color: colors.sub,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  detailsDisclosureIconOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
   sheetClose: {
-    width: 40,
-    height: 40,
-    borderRadius: 17,
+    width: minimumTouchTarget,
+    height: minimumTouchTarget,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(99,110,114,0.1)',
@@ -7403,6 +8061,17 @@ function createStyles(theme: ThemePalette) {
     fontSize: 12,
     fontWeight: '800',
   },
+  draftHint: {
+    alignSelf: 'flex-start',
+    color: colors.green,
+    backgroundColor: colors.soft,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+    overflow: 'hidden',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   inputGroup: {
     gap: 7,
   },
@@ -7412,9 +8081,9 @@ function createStyles(theme: ThemePalette) {
     fontWeight: '700',
   },
   input: {
-    borderRadius: 19,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
     color: colors.text,
     backgroundColor: colors.soft,
   },
@@ -7700,14 +8369,23 @@ function createStyles(theme: ThemePalette) {
   sheetChipTextActive: {
     color: '#fff',
   },
+  saveError: {
+    borderRadius: radius.md,
+    padding: spacing[3],
+    color: colors.danger,
+    backgroundColor: colors.dangerSoft,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
   primaryButton: {
     minHeight: 54,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     overflow: 'hidden',
   },
   primaryButtonGradient: {
     minHeight: 54,
-    borderRadius: 20,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },

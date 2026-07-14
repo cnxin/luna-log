@@ -2,6 +2,9 @@ export { springs, useReducedMotion, useReducedTransparency, projectMomentum, rub
 export { PressScale } from './PressScale';
 export { Material } from './Material';
 export { AppleSheet } from './AppleSheet';
+export { AppSurface, Divider } from './AppSurface';
+export { ThemeProvider, useOptionalTheme, useTheme, type ThemePalette } from './theme';
+export { spacing, radius, typography, minimumTouchTarget } from './tokens';
 export { FadeSlideIn, AnimatedBar, ScaleOnSelect } from './FadeSlideIn';
 export {
   hapticLight,

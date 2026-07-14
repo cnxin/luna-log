@@ -1,20 +1,20 @@
 {
-  "version": "1.0.12",
-  "releaseDate": "2026-07-13",
-  "publishedAt": "2026-07-13T00:00:00Z",
-  "title": "Luna Log 1.0.12：Apple Design 风格交互升级",
+  "version": "1.0.13",
+  "releaseDate": "2026-07-15",
+  "publishedAt": "2026-07-15T00:00:00Z",
+  "title": "Luna Log 1.0.13: Content-first and reliable recording",
   "highlights": [
-    "记录表单改为可中断拖拽 Sheet，支持速度继承、吸附与边缘回弹。",
-    "底栏与关键控件加入按下反馈、材质层级，并收敛首页筛选与字重。",
-    "日历支持左右滑换月；统计柱图与时间线加入 spring / 入场动效。",
-    "补充保存、删除、吸附等有意义触感反馈，并支持减少动态效果降级。"
+    "Focus the home screen on current context and adding records, with filters on demand.",
+    "Restore unfinished drafts and keep failed saves in the form for immediate retry.",
+    "Add readable multi-event calendar markers and summaries for insights, imports, and exports.",
+    "Follow the system dark appearance and improve touch targets and screen-reader semantics."
   ],
-  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
-  "apkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
-  "mirrorApkUrl": "https://gitee.com/ysjugg/luna-log/releases/download/v1.0.12/luna-log-v1.0.12-release.apk",
-  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.12",
-  "apkName": "luna-log-v1.0.12-release.apk",
-  "apkSize": 88499234,
-  "apkSha256": "bbaad33690d9b22b681fb344f112f0aacec530fa9c1e266090c94ec1e87241b0",
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
+  "apkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
+  "mirrorApkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.13",
+  "apkName": "luna-log-v1.0.13-release.apk",
+  "apkSize": 88523058,
+  "apkSha256": "81c4e0b0caa421f8e1e4411800ce8103197739885aea368bd78a913917b97092",
   "mandatory": false
 }
