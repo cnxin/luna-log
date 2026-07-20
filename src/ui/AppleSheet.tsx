@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, type PropsWithChildren, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from 'react';
 import { Dimensions, Modal, Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -56,6 +56,7 @@ export function AppleSheet({
   const resolvedTint = tint || (theme?.isDark ? 'dark' : 'light');
   const [mounted, setMounted] = useState(visible);
   const [sheetHeight, setSheetHeight] = useState(DEFAULT_MAX_HEIGHT);
+  const webCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const translateY = useSharedValue(DEFAULT_MAX_HEIGHT);
   const scrimOpacity = useSharedValue(0);
@@ -78,24 +79,23 @@ export function AppleSheet({
   const unmount = useCallback(() => {
     setMounted(false);
   }, []);
+
   useEffect(() => {
     if (visible) {
-      setMounted(true);
-      if (reducedMotion) {
-        translateY.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) });
-        scrimOpacity.value = withTiming(1, { duration: 200 });
-      } else {
-        // Continue from current presentation value when reopening mid-flight
-        if (translateY.value >= currentHeight.value * 0.9) {
-          translateY.value = currentHeight.value;
-        }
-        translateY.value = withSpring(0, springs.snappy);
-        scrimOpacity.value = withTiming(1, { duration: 280 });
+      if (webCloseTimer.current) {
+        clearTimeout(webCloseTimer.current);
+        webCloseTimer.current = null;
       }
+      setMounted(true);
       return;
     }
 
     if (!mounted) return;
+
+    if (Platform.OS === 'web') {
+      // Reanimated Web may not invoke a spring completion callback after a Modal closes.
+      webCloseTimer.current = setTimeout(unmount, reducedMotion ? 200 : 360);
+    }
 
     if (reducedMotion) {
       translateY.value = withTiming(currentHeight.value, { duration: 180 }, (finished) => {
@@ -108,10 +108,37 @@ export function AppleSheet({
       });
       scrimOpacity.value = withTiming(0, { duration: 240 });
     }
+    return () => {
+      if (webCloseTimer.current) {
+        clearTimeout(webCloseTimer.current);
+        webCloseTimer.current = null;
+      }
+    };
   }, [visible, reducedMotion, mounted, translateY, scrimOpacity, currentHeight, unmount]);
 
+  useEffect(() => {
+    if (!visible || !mounted) return;
+
+    const frame = requestAnimationFrame(() => {
+      if (reducedMotion) {
+        translateY.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.ease) });
+        scrimOpacity.value = withTiming(1, { duration: 200 });
+        return;
+      }
+
+      // Start only after the native modal has mounted so the opening animation cannot finish off-screen.
+      if (translateY.value >= currentHeight.value * 0.9) {
+        translateY.value = currentHeight.value;
+      }
+      translateY.value = withSpring(0, springs.snappy);
+      scrimOpacity.value = withTiming(1, { duration: 280 });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [visible, mounted, reducedMotion, translateY, scrimOpacity, currentHeight]);
+
   const panGesture = Gesture.Pan()
-    .activeOffsetY(8)
+    .activeOffsetY([-8, 8])
     .onStart(() => {
       'worklet';
       startY.value = translateY.value;
@@ -169,6 +196,7 @@ export function AppleSheet({
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: scrimOpacity.value,
   }));
+  const acceptsPointerEvents = visible || Platform.OS !== 'web';
 
   if (!mounted) return null;
 
@@ -176,7 +204,7 @@ export function AppleSheet({
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={closeSheet} statusBarTranslucent>
-      <GestureHandlerRootView style={styles.root}>
+      <GestureHandlerRootView style={styles.root} pointerEvents={acceptsPointerEvents ? 'auto' : 'none'}>
         <Animated.View style={[styles.scrim, { backgroundColor: resolvedScrimColor }, scrimStyle]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={closeSheet} />
         </Animated.View>
@@ -210,7 +238,7 @@ export function AppleSheet({
           ) : null}
 
           <GestureDetector gesture={panGesture}>
-            <Animated.View style={styles.handleArea}>
+            <Animated.View testID={'apple-sheet-handle'} style={styles.handleArea}>
               <View style={[styles.handle, { backgroundColor: handleColor }]} />
               {header}
             </Animated.View>

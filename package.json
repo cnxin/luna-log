@@ -1,6 +1,6 @@
 {
   "name": "intimacy-cycle-app",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.2",
@@ -43,7 +43,8 @@
     "web:preview": "expo start --web --clear --port 8090",
     "typecheck": "node --stack_size=8192 ./node_modules/typescript/bin/tsc --noEmit",
     "test": "npm run test:logic",
-    "test:logic": "node --test tests/recordValidation.test.mts tests/encryptedEnvelope.test.mts"
+    "test:e2e:web": "node scripts/run-web-e2e.mjs",
+    "test:logic": "node --test tests/recordValidation.test.mts tests/encryptedEnvelope.test.mts tests/entryDraft.test.mts tests/timelineSearch.test.mts"
   },
   "private": true
 }

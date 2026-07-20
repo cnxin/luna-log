@@ -5,7 +5,13 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { allowScreenCaptureAsync, preventScreenCaptureAsync } from 'expo-screen-capture';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
+import { parseEntryDraft, type EntryDraft } from './src/domain/entryDraft';
 import { isValidDateKey, normalizeImportedState } from './src/domain/recordValidation';
+import { filterTimelineBySearch } from './src/domain/timelineSearch';
+import { EmptyInsights } from './src/features/insights/EmptyInsights';
+import { SettingsScreen } from './src/features/settings/SettingsScreen';
+import { TimelineFilterSheet } from './src/features/timeline/TimelineFilterSheet';
+import { TimelineRecordRow } from './src/features/timeline/TimelineRecordRow';
 import {
   defaultProtectionSettings,
   discardEntryDraft,
@@ -19,10 +25,9 @@ import {
   persistStoredAppData,
   type ProtectionSettings,
 } from './src/storage/secureAppStorage';
-import { AppSurface, AppleSheet, AnimatedBar, FadeSlideIn, Material, PressScale, ScaleOnSelect, ThemeProvider, hapticMedium, hapticSelection, hapticSuccess, hapticWarning, minimumTouchTarget, radius, spacing, typography, type ThemePalette } from './src/ui';
+import { AppSurface, AppleSheet, AnimatedBar, EmptyState, FadeSlideIn, Field, IconButton, Material, OptionSection, PressScale, ScaleOnSelect, ThemeProvider, hapticMedium, hapticSelection, hapticSuccess, hapticWarning, minimumTouchTarget, radius, spacing, typography, type ThemePalette } from './src/ui';
 import {
   Activity,
-  Download,
   ExternalLink,
   BarChart3,
   CalendarDays,
@@ -41,14 +46,12 @@ import {
   Hourglass,
   Info,
   Moon,
-  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   Settings,
   Sparkles,
   Trash2,
-  Upload,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -67,7 +70,6 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   useColorScheme,
@@ -133,40 +135,6 @@ type SymptomRecord = {
   notes?: string;
 };
 
-type EntryDraft = {
-  version: 1;
-  type: SheetType;
-  savedAt: string;
-  data: {
-    date: string;
-    time: string;
-    count: string;
-    duration: string;
-    partnerAlias: string;
-    sexTypes: string[];
-    protectionMethods: string[];
-    place: string;
-    mood: string;
-    satisfaction: string;
-    arousal: boolean;
-    partnerArousal: boolean;
-    orgasm: boolean;
-    toyUsed: boolean;
-    lingerie: boolean;
-    watchedAdultMovie: boolean;
-    syncedWithPartner: boolean;
-    ejaculationPlace: string;
-    initiator: 'self' | 'partner';
-    positions: string[];
-    soloTools: string[];
-    notes: string;
-    periodEnd: string;
-    flow: string;
-    pain: string;
-    symptoms: string[];
-  };
-};
-
 type AppState = {
   sexRecords: SexRecord[];
   periodRecords: PeriodRecord[];
@@ -191,6 +159,7 @@ type TimelineItem = {
   title: string;
   meta: string[];
   notes?: string;
+  searchText: string[];
 };
 
 type CycleInfo = {
@@ -291,7 +260,7 @@ type AppUpdateInfo = {
 };
 
 const today = new Date();
-const APP_VERSION = '1.0.13';
+const APP_VERSION = '1.0.14';
 const UPDATE_REPOSITORY_URL = 'https://github.com/cnxin/luna-log';
 const LATEST_RELEASE_URL = 'https://api.github.com/repos/cnxin/luna-log/releases/latest';
 const UPDATE_SOURCES: UpdateSource[] = [
@@ -304,6 +273,17 @@ const UPDATE_SOURCES: UpdateSource[] = [
   },
 ];
 const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '1.0.14',
+    date: '2026-07-20',
+    title: '修复亲密记录弹层并补强回归验证',
+    highlights: [
+      '修复 Android 添加亲密记录时弹层内容折叠在底部的问题',
+      '支持从底部拖拽条向上展开，并确保弹层挂载后再启动开启动画',
+      '补充时间线搜索、共享界面组件以及多视口 Web 端到端验证',
+      '加入 GitHub Actions 校验和签名 Android Release 工作流',
+    ],
+  },
   {
     version: '1.0.13',
     date: '2026-07-15',
@@ -1532,7 +1512,9 @@ export default function App() {
               )}
               {loaded && screen === 'settings' && (
                 <SettingsScreen
-                  state={state}
+                  settings={state.settings}
+                  themeOptions={themeOptions}
+                  themePalettes={themePalettes}
                   onPatch={(settings) => {
                     if (settings.screenCaptureProtection !== undefined) {
                       void updateProtectionSettings({ screenCaptureProtection: settings.screenCaptureProtection }).then((saved) => {
@@ -1708,6 +1690,7 @@ function HomeScreen({
   const [timelineRange, setTimelineRange] = useState<TimelineRange>('week');
   const [customRangeStart, setCustomRangeStart] = useState(toDateKey(addDays(new Date(), -6)));
   const [customRangeEnd, setCustomRangeEnd] = useState(toDateKey(new Date()));
+  const [searchQuery, setSearchQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
 
@@ -1720,16 +1703,18 @@ function HomeScreen({
     { value: 'custom', label: '自定义' },
   ];
   const rangedTimeline = filterTimelineByRange(timeline, timelineRange, customRangeStart, customRangeEnd);
+  const searchedTimeline = filterTimelineBySearch(rangedTimeline, searchQuery);
   const filterOptions: Array<{ value: 'all' | RecordType; label: string; count: number }> = [
-    { value: 'all', label: '全部', count: rangedTimeline.length },
-    { value: 'sex', label: '亲密', count: rangedTimeline.filter((item) => item.type === 'sex').length },
-    { value: 'period', label: '经期', count: rangedTimeline.filter((item) => item.type === 'period').length },
-    { value: 'symptom', label: '症状', count: rangedTimeline.filter((item) => item.type === 'symptom').length },
+    { value: 'all', label: '全部', count: searchedTimeline.length },
+    { value: 'sex', label: '亲密', count: searchedTimeline.filter((item) => item.type === 'sex').length },
+    { value: 'period', label: '经期', count: searchedTimeline.filter((item) => item.type === 'period').length },
+    { value: 'symptom', label: '症状', count: searchedTimeline.filter((item) => item.type === 'symptom').length },
   ];
-  const filtered = filter === 'all' ? rangedTimeline : rangedTimeline.filter((item) => item.type === filter);
+  const filtered = filter === 'all' ? searchedTimeline : searchedTimeline.filter((item) => item.type === filter);
   const visible = showAll ? filtered : filtered.slice(0, 20);
   const activeRangeLabel = timelineRangeOptions.find((option) => option.value === timelineRange)?.label || '一周';
   const activeTypeLabel = filterOptions.find((option) => option.value === filter)?.label || '全部';
+  const activeSearchLabel = searchQuery.trim() ? '搜索中' : '';
   return (
     <View>
       <AppSurface kind="primary" style={styles.homeTask}>
@@ -1757,9 +1742,9 @@ function HomeScreen({
           {timeline.length > 0 && (
             <PressScale
               style={styles.homeFilterSummary}
-              pressableProps={{ onPress: () => setFilterSheetOpen(true), accessibilityRole: 'button', accessibilityLabel: `筛选：${activeRangeLabel}，${activeTypeLabel}` }}
+              pressableProps={{ onPress: () => setFilterSheetOpen(true), accessibilityRole: 'button', accessibilityLabel: `筛选：${activeRangeLabel}，${activeTypeLabel}${activeSearchLabel ? `，${activeSearchLabel}` : ''}` }}
             >
-              <Text style={styles.homeFilterSummaryText}>{`${activeRangeLabel} · ${activeTypeLabel}`}</Text>
+              <Text style={styles.homeFilterSummaryText}>{`${activeRangeLabel} · ${activeTypeLabel}${activeSearchLabel ? ` · ${activeSearchLabel}` : ''}`}</Text>
               <ChevronDown color={colors.primary} size={18} strokeWidth={2.5} />
             </PressScale>
           )}
@@ -1771,7 +1756,6 @@ function HomeScreen({
                   <RecordCard
                     key={`${item.type}-${item.id}`}
                     item={item}
-                    privacy={false}
                     index={index}
                     sexRecord={item.type === 'sex' ? state.sexRecords.find((record) => record.id === item.id) : undefined}
                     periodRecord={item.type === 'period' ? state.periodRecords.find((record) => record.id === item.id) : undefined}
@@ -1789,19 +1773,24 @@ function HomeScreen({
                 )}
               </>
             ) : (
-              <Text style={styles.empty}>该筛选条件下还没有记录。</Text>
+              <Text style={styles.empty}>{searchQuery.trim() ? '没有找到匹配记录，可尝试更换关键词或筛选条件。' : '该筛选条件下还没有记录。'}</Text>
             )
           ) : (
             <Text style={styles.empty}>还没有记录。使用上方“添加记录”开始。</Text>
           )}
         </>
       )}
-      <HomeFilterSheet
+      <TimelineFilterSheet
         visible={filterSheetOpen}
         range={timelineRange}
         type={filter}
-        customRangeStart={customRangeStart}
-        customRangeEnd={customRangeEnd}
+        customRangeFields={
+          <>
+            <DatePickerField label="开始日期" value={customRangeStart} onChange={setCustomRangeStart} />
+            <DatePickerField label="结束日期" value={customRangeEnd} onChange={setCustomRangeEnd} />
+          </>
+        }
+        searchQuery={searchQuery}
         onRangeChange={(next) => {
           setTimelineRange(next);
           setShowAll(false);
@@ -1810,134 +1799,21 @@ function HomeScreen({
           setFilter(next);
           setShowAll(false);
         }}
-        onCustomRangeStartChange={setCustomRangeStart}
-        onCustomRangeEndChange={setCustomRangeEnd}
+        onSearchQueryChange={(next) => {
+          setSearchQuery(next);
+          setShowAll(false);
+        }}
         onReset={() => {
           setTimelineRange('week');
           setFilter('all');
           setCustomRangeStart(toDateKey(addDays(new Date(), -6)));
           setCustomRangeEnd(toDateKey(new Date()));
+          setSearchQuery('');
           setShowAll(false);
         }}
         onClose={() => setFilterSheetOpen(false)}
       />
     </View>
-  );
-}
-
-function HomeFilterSheet({
-  visible,
-  range,
-  type: recordType,
-  customRangeStart,
-  customRangeEnd,
-  onRangeChange,
-  onTypeChange,
-  onCustomRangeStartChange,
-  onCustomRangeEndChange,
-  onReset,
-  onClose,
-}: {
-  visible: boolean;
-  range: TimelineRange;
-  type: 'all' | RecordType;
-  customRangeStart: string;
-  customRangeEnd: string;
-  onRangeChange: (range: TimelineRange) => void;
-  onTypeChange: (type: 'all' | RecordType) => void;
-  onCustomRangeStartChange: (date: string) => void;
-  onCustomRangeEndChange: (date: string) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const rangeOptions: Array<{ value: TimelineRange; label: string }> = [
-    { value: 'week', label: '一周' },
-    { value: 'month', label: '一月' },
-    { value: 'halfYear', label: '半年' },
-    { value: 'year', label: '一年' },
-    { value: 'all', label: '全部' },
-    { value: 'custom', label: '自定义' },
-  ];
-  const typeOptions: Array<{ value: 'all' | RecordType; label: string }> = [
-    { value: 'all', label: '全部记录' },
-    { value: 'sex', label: '亲密' },
-    { value: 'period', label: '经期' },
-    { value: 'symptom', label: '身体状态' },
-  ];
-
-  return (
-    <AppleSheet
-      visible={visible}
-      onClose={onClose}
-      maxHeight={Platform.OS === 'web' ? 620 : undefined}
-      backgroundColor={colors.materialHeavy}
-      scrimColor={colors.scrim}
-      tint={colors.isDark ? 'dark' : 'light'}
-      style={styles.filterSheetPanel}
-      header={
-        <View style={styles.filterSheetHeader}>
-          <View>
-            <Text style={styles.dateLabel}>最近记录</Text>
-            <Text style={styles.sheetTitle}>筛选记录</Text>
-          </View>
-          <PressScale style={styles.sheetClose} pressableProps={{ onPress: onClose, accessibilityRole: 'button', accessibilityLabel: '关闭筛选' }}>
-            <X color={colors.sub} size={21} strokeWidth={2.6} />
-          </PressScale>
-        </View>
-      }
-    >
-      <ScrollView contentContainerStyle={styles.filterSheetContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <OptionSection label="时间范围">
-          <View style={styles.sheetChipGroup}>
-            {rangeOptions.map((option) => {
-              const active = range === option.value;
-              return (
-                <PressScale
-                  key={option.value}
-                  style={[styles.sheetChip, active && styles.sheetChipActive]}
-                  pressableProps={{ onPress: () => onRangeChange(option.value), accessibilityRole: 'button', accessibilityLabel: option.label, accessibilityState: { selected: active } }}
-                >
-                  <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
-                </PressScale>
-              );
-            })}
-          </View>
-        </OptionSection>
-
-        {range === 'custom' && (
-          <View style={styles.customRangePanel}>
-            <DatePickerField label="开始日期" value={customRangeStart} onChange={onCustomRangeStartChange} />
-            <DatePickerField label="结束日期" value={customRangeEnd} onChange={onCustomRangeEndChange} />
-          </View>
-        )}
-
-        <OptionSection label="记录类型">
-          <View style={styles.sheetChipGroup}>
-            {typeOptions.map((option) => {
-              const active = recordType === option.value;
-              return (
-                <PressScale
-                  key={option.value}
-                  style={[styles.sheetChip, active && styles.sheetChipActive]}
-                  pressableProps={{ onPress: () => onTypeChange(option.value), accessibilityRole: 'button', accessibilityLabel: option.label, accessibilityState: { selected: active } }}
-                >
-                  <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{option.label}</Text>
-                </PressScale>
-              );
-            })}
-          </View>
-        </OptionSection>
-
-        <View style={styles.filterSheetActions}>
-          <PressScale style={styles.filterResetButton} pressableProps={{ onPress: onReset, accessibilityRole: 'button', accessibilityLabel: '恢复默认筛选' }}>
-            <Text style={styles.filterResetText}>恢复默认</Text>
-          </PressScale>
-          <PressScale style={styles.filterApplyButton} pressableProps={{ onPress: onClose, accessibilityRole: 'button', accessibilityLabel: '应用筛选' }}>
-            <Text style={styles.filterApplyText}>完成</Text>
-          </PressScale>
-        </View>
-      </ScrollView>
-    </AppleSheet>
   );
 }
 
@@ -2145,17 +2021,17 @@ function CalendarScreen({
         }}
       >
         <View style={styles.calendarHeader}>
-        <PressScale style={styles.roundButton} pressableProps={{ onPress: () => shiftMonth(-1) }}>
+        <IconButton label="上个月" onPress={() => shiftMonth(-1)}>
           <ChevronLeft color={colors.primary} size={21} strokeWidth={2.7} />
-        </PressScale>
+        </IconButton>
         <PressScale style={styles.calendarTitleBox} pressableProps={{ onPress: () => setMonthPickerOpen(true) }}>
           <Text style={styles.calendarTitle}>{monthTitle}</Text>
           <Text style={styles.calendarWeekLine}>{prediction}</Text>
           <Text style={styles.calendarDateLine}>{longDate(selectedDate)}</Text>
         </PressScale>
-        <PressScale style={styles.roundButton} pressableProps={{ onPress: () => shiftMonth(1) }}>
+        <IconButton label="下个月" onPress={() => shiftMonth(1)}>
           <ChevronRight color={colors.primary} size={21} strokeWidth={2.7} />
-        </PressScale>
+        </IconButton>
         </View>
 
         <View style={styles.calendarTodayRow}>
@@ -2392,11 +2268,12 @@ function InsightsScreen({
 }) {
   if (state.settings.privacyMode) {
     return (
-      <View style={styles.emptyInsights}>
-        <EyeOff size={68} color={colors.sub} strokeWidth={1.8} />
-        <Text style={styles.emptyTitle}>统计已隐藏</Text>
-        <Text style={styles.emptyHint}>关闭隐私模式后查看趋势和周期数据</Text>
-      </View>
+      <EmptyState
+        icon={<EyeOff size={68} color={colors.sub} strokeWidth={1.8} />}
+        title="统计已隐藏"
+        description="关闭隐私模式后查看趋势和周期数据"
+        style={styles.emptyInsights}
+      />
     );
   }
 
@@ -2534,156 +2411,6 @@ function InsightsScreen({
   );
 }
 
-
-function EmptyInsights({ onAddEntry }: { onAddEntry: () => void }) {
-  return (
-    <View style={styles.emptyInsights}>
-      <BarChart3 size={68} color={colors.sub} strokeWidth={1.8} />
-      <Text style={styles.emptyTitle}>还没有统计数据</Text>
-      <Text style={styles.emptyHint}>添加几条记录后，这里会显示趋势和周期摘要。</Text>
-      <PressScale style={styles.emptyAction} pressableProps={{ onPress: onAddEntry, accessibilityRole: 'button', accessibilityLabel: '添加记录' }}>
-        <Text style={styles.emptyActionText}>添加记录</Text>
-      </PressScale>
-    </View>
-  );
-}function SettingsScreen({
-  state,
-  onPatch,
-  onAppLockChange,
-  onClear,
-  onExportData,
-  onImportData,
-  recoveryAvailable,
-  onExportInvalidData,
-  onDiscardInvalidData,
-}: {
-  state: AppState;
-  onPatch: (settings: Partial<AppState['settings']>) => void;
-  onAppLockChange: (enabled: boolean) => void;
-  onClear: () => void;
-  onExportData: () => void;
-  onImportData: () => void;
-  recoveryAvailable: boolean;
-  onExportInvalidData: () => void;
-  onDiscardInvalidData: () => void;
-}) {
-  return (
-    <View>
-      <View style={styles.profileCard}>
-        <LinearGradient colors={colors.avatarGradient} style={styles.profilePhoto}>
-          <Moon color="#fff" size={28} />
-        </LinearGradient>
-        <View style={styles.profileMain}>
-          <Text style={styles.profileTitle}>Luna Log</Text>
-          <Text style={styles.profileDesc}>本地优先的私密生活记录 Demo</Text>
-          <View style={styles.tagCloud}>
-            <Text style={styles.tag}>Android / iOS</Text>
-            <Text style={[styles.tag, styles.dangerTag]}>隐私模式</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.settingRow}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.settingTitle}>隐私模式</Text>
-          <Text style={styles.settingHint}>隐藏首页、日历和统计中的敏感内容</Text>
-        </View>
-        <Switch value={state.settings.privacyMode} onValueChange={(privacyMode) => onPatch({ privacyMode })} />
-      </View>
-      <View style={styles.settingRow}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.settingTitle}>应用锁</Text>
-          <Text style={styles.settingHint}>返回应用时要求生物识别或设备凭据</Text>
-        </View>
-        <Switch value={state.settings.appLockEnabled} onValueChange={onAppLockChange} />
-      </View>
-      <View style={styles.settingRow}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.settingTitle}>截图保护</Text>
-          <Text style={styles.settingHint}>Android 上阻止截图、录屏和最近任务缩略图</Text>
-        </View>
-        <Switch value={state.settings.screenCaptureProtection} onValueChange={(screenCaptureProtection) => onPatch({ screenCaptureProtection })} />
-      </View>
-      <View style={styles.themePanel}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.settingTitle}>视觉风格</Text>
-          <Text style={styles.settingHint}>原版、薄荷和参考深海冷光图片的蓝色主题</Text>
-        </View>
-        <View style={styles.themeOptionGrid}>
-          {themeOptions.map((option) => {
-            const theme = themePalettes[option.value];
-            const active = (state.settings.themeStyle || 'classic') === option.value;
-            return (
-              <Pressable
-                key={option.value}
-                style={[styles.themeOption, active && styles.themeOptionActive]}
-                onPress={() => onPatch({ themeStyle: option.value })}
-              >
-                <LinearGradient colors={theme.avatarGradient} style={styles.themeSwatch} />
-                <View style={styles.themeOptionCopy}>
-                  <Text style={[styles.themeOptionTitle, active && styles.themeOptionTitleActive]}>{option.label}</Text>
-                  <Text style={styles.themeOptionHint}>{option.hint}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      </View>
-      <NumberSetting label="周期长度" hint="经期记录不足 3 次时的默认预测值" value={state.settings.cycleDays} min={15} max={60} onChange={(cycleDays) => onPatch({ cycleDays })} />
-      <NumberSetting label="经期天数" hint="用于日历经期标记" value={state.settings.periodDays} min={2} max={10} onChange={(periodDays) => onPatch({ periodDays })} />
-
-      <View style={styles.themePanel}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.settingTitle}>数据管理</Text>
-          <Text style={styles.settingHint}>导出 JSON 备份，或从备份恢复本地记录</Text>
-        </View>
-        <Pressable style={styles.settingRowCompact} onPress={onExportData}>
-          <Download color={colors.primary} size={19} strokeWidth={2.6} />
-          <View style={styles.settingCopy}>
-            <Text style={styles.settingTitle}>导出数据</Text>
-            <Text style={styles.settingHint}>备份到文件</Text>
-          </View>
-        </Pressable>
-        <Pressable style={styles.settingRowCompact} onPress={onImportData}>
-          <Upload color={colors.primary} size={19} strokeWidth={2.6} />
-          <View style={styles.settingCopy}>
-            <Text style={styles.settingTitle}>导入数据</Text>
-            <Text style={styles.settingHint}>从备份恢复并覆盖当前本地数据</Text>
-          </View>
-        </Pressable>
-      </View>
-      {recoveryAvailable && (
-        <View style={styles.themePanel}>
-          <View style={styles.settingCopy}>
-            <Text style={styles.settingTitle}>受损数据恢复</Text>
-            <Text style={styles.settingHint}>已停止自动写入，避免覆盖无法读取的本地数据</Text>
-          </View>
-          <Pressable style={styles.settingRowCompact} onPress={onExportInvalidData}>
-            <Download color={colors.primary} size={19} strokeWidth={2.6} />
-            <View style={styles.settingCopy}>
-              <Text style={styles.settingTitle}>导出原始恢复数据</Text>
-              <Text style={styles.settingHint}>保留当前文件以便后续修复</Text>
-            </View>
-          </Pressable>
-          <Pressable style={styles.settingRowCompact} onPress={onDiscardInvalidData}>
-            <Trash2 color={colors.danger} size={19} strokeWidth={2.6} />
-            <View style={styles.settingCopy}>
-              <Text style={styles.dangerRowTitle}>丢弃并重新开始</Text>
-              <Text style={styles.settingHint}>删除受损本地数据</Text>
-            </View>
-          </Pressable>
-        </View>
-      )}
-      <Pressable style={styles.dangerRow} onPress={onClear}>
-        <View style={styles.settingCopy}>
-          <Text style={styles.dangerRowTitle}>重置所有数据</Text>
-          <Text style={styles.settingHint}>清空全部记录，含首次启动的演示数据</Text>
-        </View>
-        <Trash2 color={colors.danger} size={18} strokeWidth={2.5} />
-      </Pressable>
-    </View>
-  );
-}
 
 function AboutScreen({
   visible,
@@ -3044,10 +2771,8 @@ function EntrySheet({
     loadEntryDraft()
       .then((raw) => {
         if (!alive || !raw) return;
-        const draft = JSON.parse(raw) as Partial<EntryDraft>;
-        if (draft.version !== 1 || draft.type !== type || !draft.data) return;
-        const data = draft.data as EntryDraft['data'];
-        if (typeof data.date !== 'string' || typeof data.notes !== 'string') return;
+        const data = parseEntryDraft(raw, type);
+        if (!data) return;
         setDate(data.date);
         setTime(data.time || '12:00');
         setCount(data.count || '1');
@@ -3278,13 +3003,9 @@ function EntrySheet({
             <Text style={styles.dateLabel}>{sheetShort}</Text>
             <Text style={styles.sheetTitle}>{editingRecord ? `编辑${typeMeta.label}` : typeMeta.label}</Text>
           </View>
-          <PressScale
-            style={styles.sheetClose}
-            disabled={isSaving}
-            pressableProps={{ onPress: requestClose, hitSlop: 8, accessibilityRole: 'button', accessibilityLabel: '关闭记录表单' }}
-          >
+          <IconButton label="关闭记录表单" onPress={requestClose} disabled={isSaving}>
             <X color={colors.sub} size={21} strokeWidth={2.6} />
-          </PressScale>
+          </IconButton>
         </View>
       }
       style={styles.sheetPanel}
@@ -3303,7 +3024,7 @@ function EntrySheet({
           <DatePickerField label={type === 'period' ? '开始日期' : '日期'} value={date} onChange={setDate} />
           {showCoreSexFields && <TimePickerField label="时间" value={time} onChange={setTime} />}
           {showCoreSexFields && <DurationField label="持续时间" value={duration} onChange={setDuration} />}
-          {showCoreSexFields && <TextField label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
+          {showCoreSexFields && <Field label="次数" value={count} onChangeText={setCount} keyboardType="number-pad" placeholder="记录本次发生了几次" />}
 
           {showPartneredDetails && (
             <OptionSection label="保护措施">
@@ -3365,8 +3086,8 @@ function EntrySheet({
           {showPartneredDetails && detailsOpen && (
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>更多细节</Text>
-              <TextField label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />
-              <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
+              <Field label="伴侣" value={partnerAlias} onChangeText={setPartnerAlias} placeholder="选择你的伴侣" />
+              <Field label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
               <OptionSection label="高潮信息">
                 <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
                 <SwitchOption label="伴侣高潮" hint="滑动开关来选择伴侣是否高潮" value={partnerArousal} onChange={setPartnerArousal} Icon={HeartHandshake} />
@@ -3415,7 +3136,7 @@ function EntrySheet({
           {showSoloDetails && detailsOpen && (
             <View style={styles.detailsSection}>
               <Text style={styles.detailsSectionTitle}>更多细节</Text>
-              <TextField label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
+              <Field label="地点" value={place} onChangeText={setPlace} placeholder="选择本次亲密时刻的地点" />
               <SwitchOption label="观看成人电影" hint="滑动开关来选择是否观看" value={watchedAdultMovie} onChange={setWatchedAdultMovie} Icon={Eye} />
               <SwitchOption label="高潮" hint="滑动开关来选择是否高潮" value={arousal} onChange={setArousal} Icon={Sparkles} />
               <SwitchOption label="已同步到其他记录" hint="仅作为本地标记，不会发送任何数据" value={syncedWithPartner} onChange={setSyncedWithPartner} Icon={HeartHandshake} />
@@ -3458,7 +3179,7 @@ function EntrySheet({
               ))}
             </View>
           )}
-          <TextField label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
+          <Field label="备注" value={notes} onChangeText={setNotes} multiline placeholder="只保存在本地" />
           {saveError && (
             <Text style={styles.saveError} accessibilityRole={'alert'}>
               {saveError}
@@ -3535,7 +3256,6 @@ function MetricCard({ label, value, hint }: { label: string; value: string; hint
 
 function RecordCard({
   item,
-  privacy,
   sexRecord,
   periodRecord,
   symptomRecord,
@@ -3546,7 +3266,6 @@ function RecordCard({
   index = 0,
 }: {
   item: TimelineItem;
-  privacy: boolean;
   sexRecord?: SexRecord;
   periodRecord?: PeriodRecord;
   symptomRecord?: SymptomRecord;
@@ -3586,32 +3305,15 @@ function RecordCard({
 
   return (
     <FadeSlideIn delay={Math.min(index, 8) * 35} distance={8}>
-      <View style={styles.recordCard}>
-        <PressScale
-          style={styles.recordMainAction}
-        pressableProps={{
-          onPress: () => canEdit && edit(),
-          accessibilityRole: 'button',
-          accessibilityLabel: `${summary.title}，${summary.meta}`,
-          accessibilityHint: canEdit ? '点按编辑，更多操作可通过更多按钮打开' : undefined,
-        }}
-      >
-        <View style={styles.recordIcon}>
-          <Icon color={iconColor} size={20} strokeWidth={2.4} />
-        </View>
-        <View style={styles.recordCopy}>
-          <Text style={styles.recordTitle}>{summary.title}</Text>
-          <Text style={styles.recordMeta}>{summary.meta}</Text>
-          {!!summary.detail && <Text style={styles.recordDetailPill}>{summary.detail}</Text>}
-        </View>
-        </PressScale>
-        <PressScale
-          style={styles.recordMoreButton}
-          pressableProps={{ onPress: openActions, hitSlop: 6, accessibilityRole: 'button', accessibilityLabel: `${summary.title}的更多操作` }}
-        >
-          <MoreHorizontal color={colors.sub} size={20} strokeWidth={2.4} />
-        </PressScale>
-      </View>
+      <TimelineRecordRow
+        title={summary.title}
+        meta={summary.meta}
+        detail={summary.detail}
+        Icon={Icon}
+        iconColor={iconColor}
+        onPress={canEdit ? edit : undefined}
+        onMore={openActions}
+      />
     </FadeSlideIn>
   );
 }
@@ -3775,26 +3477,6 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
     <View style={styles.summaryTile}>
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
-function NumberSetting({ label, hint, value, min, max, onChange }: { label: string; hint: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
-  return (
-    <View style={styles.settingRow}>
-      <View style={styles.settingCopy}>
-        <Text style={styles.settingTitle}>{label}</Text>
-        <Text style={styles.settingHint}>{hint}</Text>
-      </View>
-      <TextInput
-        style={styles.settingInput}
-        value={String(value)}
-        keyboardType="number-pad"
-        onChangeText={(text) => {
-          const next = Number(text);
-          if (Number.isInteger(next) && next >= min && next <= max) onChange(next);
-        }}
-      />
     </View>
   );
 }
@@ -3971,15 +3653,6 @@ function DatePickerField({ label, value, onChange }: { label: string; value: str
           </View>
         </View>
       </Modal>
-    </View>
-  );
-}
-
-function OptionSection({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <View style={styles.optionSection}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <View style={styles.optionCard}>{children}</View>
     </View>
   );
 }
@@ -4771,39 +4444,6 @@ function ChipSelect({ options, value, onChange }: { options: string[]; value: st
   );
 }
 
-function TextField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
-  multiline,
-}: {
-  label: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-  keyboardType?: 'default' | 'number-pad';
-  multiline?: boolean;
-}) {
-  return (
-    <View style={styles.inputGroup}>
-      <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput
-        style={[styles.input, multiline && styles.textarea]}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#9aa2b7"
-        keyboardType={keyboardType}
-        multiline={multiline}
-        accessibilityLabel={label}
-        accessibilityHint={placeholder}
-      />
-    </View>
-  );
-}
-
 function median(values: number[]) {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -5018,6 +4658,7 @@ function buildTimeline(state: AppState): TimelineItem[] {
         record.satisfaction ? `满意度 ${record.satisfaction}/5` : '',
       ],
       notes: record.notes,
+      searchText: [record.partnerAlias || '', ...(record.sexTypes || []), ...(record.protectionMethods || []), record.place || '', record.mood || ''],
     })),
     ...state.periodRecords.map((record): TimelineItem => ({
       id: record.id,
@@ -5026,6 +4667,7 @@ function buildTimeline(state: AppState): TimelineItem[] {
       title: `月经开始${record.endDate ? ` - ${record.endDate}` : ''}`,
       meta: [record.flow ? `流量 ${record.flow === 'medium' ? '中' : record.flow}` : '', `痛经 ${record.painLevel || 0}/5`, ...record.symptoms],
       notes: record.notes,
+      searchText: [record.flow || '', ...record.symptoms],
     })),
     ...state.symptomRecords.map((record): TimelineItem => ({
       id: record.id,
@@ -5034,6 +4676,7 @@ function buildTimeline(state: AppState): TimelineItem[] {
       title: '症状记录',
       meta: [`强度 ${record.intensity}/5`, ...record.symptoms],
       notes: record.notes,
+      searchText: [...record.symptoms],
     })),
   ].sort((left, right) => right.date.getTime() - left.date.getTime());
 }
@@ -5740,59 +5383,6 @@ function createStyles(theme: ThemePalette) {
     fontSize: 12,
     lineHeight: 17,
   },
-  recordCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-    minHeight: 72,
-    paddingVertical: spacing[3],
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  recordMainAction: {
-    flex: 1,
-    minHeight: minimumTouchTarget,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[3],
-  },
-  recordIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.soft,
-  },
-  recordCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  recordTitle: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0,
-  },
-  recordMeta: {
-    color: colors.sub,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  recordDetailPill: {
-    alignSelf: 'flex-start',
-    color: colors.sub,
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  recordMoreButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.soft,
-  },
   empty: {
     borderWidth: 1,
     borderStyle: 'dashed',
@@ -5821,14 +5411,6 @@ function createStyles(theme: ThemePalette) {
     alignItems: 'flex-start',
     gap: 8,
     marginBottom: 12,
-  },
-  roundButton: {
-    width: minimumTouchTarget,
-    height: minimumTouchTarget,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.soft,
   },
   calendarTitleBox: {
     flex: 1,
@@ -6607,10 +6189,6 @@ function createStyles(theme: ThemePalette) {
     fontSize: 11,
     fontWeight: '800',
   },
-  dangerTag: {
-    color: colors.danger,
-    backgroundColor: colors.dangerSoft,
-  },
   emptyInsights: {
     flex: 1,
     minHeight: 420,
@@ -6652,28 +6230,6 @@ function createStyles(theme: ThemePalette) {
   },  emptyInline: {
     color: colors.sub,
     fontSize: 13,
-  },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    borderRadius: 26,
-    padding: 18,
-    marginBottom: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...cardShadow,
-  },
-  profilePhoto: {
-    width: 74,
-    height: 74,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileMain: {
-    flex: 1,
   },
   profileTitle: {
     color: colors.text,
@@ -6937,28 +6493,6 @@ function createStyles(theme: ThemePalette) {
     lineHeight: 18,
     fontWeight: '800',
   },
-  settingRowCompact: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 18,
-    padding: 13,
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 10,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...cardShadow,
-  },
   settingCopy: {
     flex: 1,
   },
@@ -6972,67 +6506,6 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 12,
     lineHeight: 17,
-  },
-  settingInput: {
-    width: 86,
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    backgroundColor: colors.soft,
-    textAlign: 'center',
-    fontWeight: '800',
-  },
-  themePanel: {
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 10,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    ...cardShadow,
-  },
-  themeOptionGrid: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  themeOption: {
-    flex: 1,
-    minWidth: 0,
-    borderRadius: 18,
-    padding: 10,
-    backgroundColor: colors.soft,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  themeOptionActive: {
-    backgroundColor: colors.card,
-    borderColor: colors.primary,
-  },
-  themeSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 13,
-    marginBottom: 8,
-  },
-  themeOptionCopy: {
-    minWidth: 0,
-  },
-  themeOptionTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  themeOptionTitleActive: {
-    color: colors.primary,
-  },
-  themeOptionHint: {
-    marginTop: 3,
-    color: colors.sub,
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 13,
   },
   monthYearModalRoot: {
     flex: 1,
@@ -7343,21 +6816,6 @@ function createStyles(theme: ThemePalette) {
     fontSize: 13,
     fontWeight: '900',
   },
-  dangerRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderRadius: 22,
-    backgroundColor: colors.dangerSoft,
-  },
-  dangerRowTitle: {
-    color: colors.danger,
-    fontSize: 15,
-    fontWeight: '900',
-  },
   timePickerColumns: {
     flexDirection: 'row',
     gap: 12,
@@ -7583,15 +7041,6 @@ function createStyles(theme: ThemePalette) {
   },
   scaleTextActive: {
     color: '#fff',
-  },
-  customRangePanel: {
-    gap: 10,
-    borderRadius: 22,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
   },
   filterRail: {
     flexDirection: 'row',
@@ -7884,58 +7333,10 @@ function createStyles(theme: ThemePalette) {
     paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     backgroundColor: colors.materialHeavy,
   },
-  filterSheetPanel: {
-    paddingHorizontal: 24,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
-    backgroundColor: colors.materialHeavy,
-  },
-  filterSheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    marginBottom: 8,
-  },
-  filterSheetContent: {
-    gap: 18,
-    paddingBottom: 12,
-  },
-  filterSheetActions: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingTop: 6,
-  },
-  filterResetButton: {
-    minHeight: 48,
-    flex: 1,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.soft,
-  },
-  filterResetText: {
-    color: colors.primary,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  filterApplyButton: {
-    minHeight: 48,
-    flex: 1,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-  },
-  filterApplyText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
   sheetScrollContent: {
     paddingBottom: 12,
   },
   sheetKeyboardAvoider: {
-    flex: 1,
     flexShrink: 1,
   },
   sheetHandle: {
@@ -8079,28 +7480,6 @@ function createStyles(theme: ThemePalette) {
     color: colors.sub,
     fontSize: 13,
     fontWeight: '700',
-  },
-  input: {
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[3],
-    color: colors.text,
-    backgroundColor: colors.soft,
-  },
-  textarea: {
-    minHeight: 88,
-    textAlignVertical: 'top',
-  },
-  optionSection: {
-    gap: 7,
-  },
-  optionCard: {
-    borderRadius: 19,
-    padding: 10,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    gap: 10,
   },
   switchOption: {
     minHeight: 58,

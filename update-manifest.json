@@ -1,20 +1,20 @@
 {
-  "version": "1.0.13",
-  "releaseDate": "2026-07-15",
-  "publishedAt": "2026-07-15T00:00:00Z",
-  "title": "Luna Log 1.0.13: Content-first and reliable recording",
+  "version": "1.0.14",
+  "releaseDate": "2026-07-20",
+  "publishedAt": "2026-07-20T07:57:05.505Z",
+  "title": "Luna Log 1.0.14: Reliable intimacy record sheets",
   "highlights": [
-    "Focus the home screen on current context and adding records, with filters on demand.",
-    "Restore unfinished drafts and keep failed saves in the form for immediate retry.",
-    "Add readable multi-event calendar markers and summaries for insights, imports, and exports.",
-    "Follow the system dark appearance and improve touch targets and screen-reader semantics."
+    "Fix the Android intimacy record sheet collapsing at the bottom of the screen.",
+    "Enable upward sheet dragging and defer opening animation until native content is mounted.",
+    "Add local timeline search and consolidate shared UI components.",
+    "Add multi-viewport Web E2E and GitHub Actions verification/release workflows."
   ],
-  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
-  "apkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
-  "mirrorApkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.13/luna-log-v1.0.13-release.apk",
-  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.13",
-  "apkName": "luna-log-v1.0.13-release.apk",
-  "apkSize": 88523058,
-  "apkSha256": "81c4e0b0caa421f8e1e4411800ce8103197739885aea368bd78a913917b97092",
+  "downloadUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.14/luna-log-v1.0.14-release.apk",
+  "apkUrl": "https://github.com/cnxin/luna-log/releases/download/v1.0.14/luna-log-v1.0.14-release.apk",
+  "mirrorApkUrl": "",
+  "releaseUrl": "https://github.com/cnxin/luna-log/releases/tag/v1.0.14",
+  "apkName": "luna-log-v1.0.14-release.apk",
+  "apkSize": 88528990,
+  "apkSha256": "46251ed4b0ee04a2822f619ebc7b406ee421e5c34a00547fdc5dad102b6a6bd0",
   "mandatory": false
 }

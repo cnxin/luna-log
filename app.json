@@ -2,7 +2,7 @@
   "expo": {
     "name": "Luna Log",
     "slug": "luna-log",
-    "version": "1.0.13",
+    "version": "1.0.14",
     "orientation": "portrait",
     "icon": "./assets/app-icons/icon-1024.png",
     "userInterfaceStyle": "automatic",
@@ -16,7 +16,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.lunalog",
-      "versionCode": 14,
+      "versionCode": 15,
       "permissions": [
         "INTERNET"
       ],

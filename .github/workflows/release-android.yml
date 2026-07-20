@@ -1,0 +1,86 @@
+name: Build and Release Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish, for example v1.0.14
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      LUNA_LOG_RELEASE_STORE_BASE64: ${{ secrets.LUNA_LOG_RELEASE_STORE_BASE64 }}
+      LUNA_LOG_RELEASE_STORE_PASSWORD: ${{ secrets.LUNA_LOG_RELEASE_STORE_PASSWORD }}
+      LUNA_LOG_RELEASE_KEY_ALIAS: ${{ secrets.LUNA_LOG_RELEASE_KEY_ALIAS }}
+      LUNA_LOG_RELEASE_KEY_PASSWORD: ${{ secrets.LUNA_LOG_RELEASE_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e:web
+      - name: Validate release metadata
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          [[ $RELEASE_TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo Invalid release tag; exit 1; }
+          test $VERSION = $(node -p 'require(process.argv[1]).version' package.json)
+          grep -F 'const APP_VERSION' App.tsx | grep -F $VERSION
+          node -e 'const app=require(process.argv[1]); if (app.expo.version !== process.argv[2]) process.exit(1)' app.json $VERSION
+      - name: Decode signing keystore
+        run: |
+          [[ -n $LUNA_LOG_RELEASE_STORE_BASE64 ]]
+          [[ -n $LUNA_LOG_RELEASE_STORE_PASSWORD ]]
+          [[ -n $LUNA_LOG_RELEASE_KEY_ALIAS ]]
+          [[ -n $LUNA_LOG_RELEASE_KEY_PASSWORD ]]
+          printf '%s' $LUNA_LOG_RELEASE_STORE_BASE64 | base64 --decode > $RUNNER_TEMP/luna-log-release.keystore
+          echo LUNA_LOG_RELEASE_STORE_FILE=$RUNNER_TEMP/luna-log-release.keystore >> $GITHUB_ENV
+      - name: Build signed APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+        working-directory: android
+      - name: Verify and package APK
+        id: apk
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          APK_NAME=luna-log-v${VERSION}-release.apk
+          cp android/app/build/outputs/apk/release/app-release.apk $APK_NAME
+          $ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs $APK_NAME
+          sha256sum $APK_NAME | tee $APK_NAME.sha256
+          echo apk_name=$APK_NAME >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-apk-${{ inputs.tag }}
+          path: |
+            ${{ steps.apk.outputs.apk_name }}
+            ${{ steps.apk.outputs.apk_name }}.sha256
+      - name: Publish GitHub Release
+        run: |
+          NOTES_FILE=release-notes-${RELEASE_TAG#v}.md
+          if gh release view $RELEASE_TAG --repo $GITHUB_REPOSITORY >/dev/null 2>&1; then
+            gh release upload $RELEASE_TAG ${{ steps.apk.outputs.apk_name }} --clobber --repo $GITHUB_REPOSITORY
+          else
+            gh release create $RELEASE_TAG ${{ steps.apk.outputs.apk_name }} --title Luna-Log-$RELEASE_TAG --notes-file $NOTES_FILE --repo $GITHUB_REPOSITORY
+          fi

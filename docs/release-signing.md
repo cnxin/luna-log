@@ -30,3 +30,24 @@ Verify every release artifact before upload:
 ```powershell
 & "$env:LOCALAPPDATA\Android\Sdk\build-tools\35.0.0\apksigner.bat" verify --print-certs .\app-release.apk
 ```
+
+## GitHub Actions
+
+`.github/workflows/verify.yml` runs type checks and logic tests for every pull request and push to `master`.
+
+`.github/workflows/release-android.yml` is manual-only. Before dispatching it for an existing `vMAJOR.MINOR.PATCH` tag, configure these repository secrets:
+
+```text
+LUNA_LOG_RELEASE_STORE_BASE64
+LUNA_LOG_RELEASE_STORE_PASSWORD
+LUNA_LOG_RELEASE_KEY_ALIAS
+LUNA_LOG_RELEASE_KEY_PASSWORD
+```
+
+Create the base64 keystore value without a trailing newline:
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('C:\secure\luna-log-release.keystore'))
+```
+
+The workflow verifies the tag against `package.json`, `App.tsx`, and `app.json`, signs and verifies the APK, uploads an Actions artifact with its SHA-256 file, then creates or updates the matching GitHub Release.
